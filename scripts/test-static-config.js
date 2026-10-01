@@ -79,8 +79,25 @@ function fetchJson(url, options = {}) {
 }
 
 // === TEST 1: Vapi assistant exists with correct config ===
+// LOCAL=true validates ./vapi/assistant.json instead of the live Vapi
+// assistant. Use it to verify edits BEFORE pushing to Vapi.
+const LOCAL = process.argv.includes("--local");
+
 async function testVapiAssistant() {
-  console.log("\n[1] Vapi US assistant");
+  console.log(`\n[1] Vapi US assistant${LOCAL ? " (LOCAL assistant.json — not pushed)" : " (LIVE Vapi API)"}`);
+
+  if (LOCAL) {
+    let a;
+    try {
+      a = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "vapi", "assistant.json"), "utf8"));
+    } catch (e) {
+      fail("Read local assistant.json", e.message);
+      return null;
+    }
+    pass("Read local assistant.json", `name: ${a.name}`);
+    return checkAssistantShape(a);
+  }
+
   if (!VAPI_API_KEY || !VAPI_ASSISTANT_ID) {
     fail("Vapi env vars", "VAPI_API_KEY or VAPI_ASSISTANT_ID missing");
     return null;
@@ -95,9 +112,18 @@ async function testVapiAssistant() {
   }
   const a = res.body;
   pass("Vapi API reachable", `name: ${a.name}`);
+  return checkAssistantShape(a);
+}
+
+// Shared shape checks — runs against both local and live assistant objects.
+// Live Vapi API nests tools + systemPrompt under `model`; the local
+// vapi/assistant.json keeps them at the top level. Normalize both.
+function checkAssistantShape(a) {
+  const m = a.model || {};
+  const tools = a.tools || m.tools || [];
+  const systemPrompt = a.systemPrompt || m.systemPrompt || "";
 
   // Model
-  const m = a.model || {};
   if (m.provider === "openai" && m.model === "gpt-4o-mini") {
     pass("Model is gpt-4o-mini");
   } else {
@@ -129,15 +155,20 @@ async function testVapiAssistant() {
     fail("Server URL", `not set or not Vercel: ${a.serverUrl}`);
   }
 
-  // First message
+  // First message — Alex asked to be called "Handy Works service desk",
+  // NOT by his personal name (questionnaire Q8.4, 2026-09-30).
   if (a.firstMessage && a.firstMessage.includes("Handy Works")) {
     pass("First message OK", a.firstMessage);
   } else {
     fail("First message", a.firstMessage);
   }
+  if (a.firstMessage && /\bAlex\b/.test(a.firstMessage)) {
+    fail("First message uses owner first name", `must not say "Alex": ${a.firstMessage}`);
+  } else {
+    pass("First message avoids owner first name", a.firstMessage);
+  }
 
   // Tools count
-  const tools = m.tools || [];
   if (tools.length === 4) {
     pass("Tools count = 4", "check_and_quote + flag_urgent + flag_uncertain + end_call");
   } else {
@@ -151,7 +182,7 @@ async function testVapiAssistant() {
     fail("Tool names", `expected ${expected.join(", ")}, got ${toolNames.join(", ")}`);
   }
 
-  return a;
+  return { assistant: a, systemPrompt };
 }
 
 // === TEST 2: System prompt patterns ===
@@ -161,7 +192,7 @@ async function testSystemPrompt(assistant) {
     fail("Skipped (no assistant data)");
     return;
   }
-  const prompt = assistant.model?.systemPrompt || "";
+  const prompt = assistant.systemPrompt || "";
 
   const checks = [
     { pattern: /I will certainly/, name: "Uses 'I will certainly'" },
@@ -169,20 +200,56 @@ async function testSystemPrompt(assistant) {
     { pattern: /Have a good day/, name: "Uses 'Have a good day' closing" },
     { pattern: /Anything else/, name: "Has 'Anything else?' check" },
     { pattern: /twenty-five/, name: "Uses 'twenty-five' (not 25)" },
-    { pattern: /eighty-nine/, name: "Uses 'eighty-nine' (not 89)" },
+
+    // --- Trip fee (questionnaire 2026-09-30): no trip fee inside radius ---
+    { pattern: /eighty-nine/, name: "No 'eighty-nine' trip fee (Alex has none)", shouldFail: true },
+    { pattern: /NO trip fee/i, name: "States there is NO trip fee" },
+    { pattern: /trip fee is payable|payable whether or not|small trip fee/i, name: "Out-of-area fee is not credited" },
+
+    // --- Hours (questionnaire Section 2) ---
+    { pattern: /closed Sunday/i, name: "Sunday is closed" },
+    { pattern: /eight to six/i, name: "Weekdays close at 6pm (not 5pm)" },
+    // Alex rejected Venmo (Q6.5). The prompt mentions Venmo only inside the
+    // anti-pattern list as a thing to avoid, so a bare /Venmo/ test would
+    // false-positive. Assert the payment line contents instead.
+    { pattern: /Cash, check, Zelle, or credit card/i, name: "Payment line = cash/check/Zelle/card" },
+    { pattern: /we take Venmo|accept[^.]{0,30}Venmo|Venmo, or|Venmo or /i, name: "Does not offer Venmo", shouldFail: true },
+    { pattern: /three percent fee/i, name: "Discloses 3% card fee" },
+
+    // --- License (questionnaire Section 0: Alex said no license) ---
+    { pattern: /32094253104/, name: "No asserted license number", shouldFail: true },
+    { pattern: /insured/i, name: "Says insured" },
+    { pattern: /does not require a trade license|doesn't require a trade license/i, name: "Explains TX license nuance" },
+
+    // --- Founding date (questionnaire 1.4: operating since 2024) ---
+    { pattern: /since 2021|twenty twenty one|Started 2021/i, name: "No 'since 2021' claim", shouldFail: true },
+    { pattern: /twenty twenty four|2024/, name: "Says operating since 2024" },
+
+    // --- Scope narrowing (questionnaire 4.5 / 4.6) ---
+    { pattern: /MINOR WORK ONLY/i, name: "Flags minor-only electrical/plumbing" },
+    { pattern: /do not work on appliances/i, name: "Explicit no appliances" },
+    { pattern: /shingle/i, name: "Handles shingle roofing" },
+    { pattern: /commercial/i, name: "Handles commercial jobs" },
+
+    // --- Callback cadence (questionnaire Section 5) ---
+    { pattern: /after five minutes|five minutes/i, name: "5-min first retry" },
+    { pattern: /ten more|after ten/i, name: "10-min second retry" },
+    { pattern: /leave a voicemail/i, name: "Asks customer to leave voicemail after 3 misses" },
+
     { pattern: /plumbing/i, name: "Mentions plumbing" },
     { pattern: /electrical/i, name: "Mentions electrical" },
     { pattern: /hvac/i, name: "Mentions HVAC" },
     { pattern: /roofing/i, name: "Mentions roofing (or coordinates)" },
     { pattern: /gas/i, name: "Mentions gas (or coordinates)" },
-    { pattern: /coordinate/i, name: "Uses 'coordinate' (not reject) for partner work" },
+    { pattern: /refer you to/i, name: "Uses 'refer you to' for partner work" },
     { pattern: /pest/i, name: "Mentions pest control (out of scope)" },
-    { pattern: /911/, name: "Mentions 911 for gas emergency" },
+    { pattern: /nine one one|911/, name: "Mentions 911 for gas emergency" },
     { pattern: /Stay safe/, name: "Has 'Stay safe' for urgent" },
     { pattern: /open windows/i, name: "Says 'open windows' for gas" },
     { pattern: /\bBye\b/, name: "No bare 'Bye'", shouldFail: true },
     { pattern: /总的来说|大概/, name: "No Chinese (TTS misreads)", shouldFail: true },
     { pattern: /Alex and Abel/, name: "Mentions both co-owners" },
+    { pattern: /Final price confirmed/i, name: "Uses price caveat (no final price promise)" },
   ];
 
   for (const c of checks) {
@@ -236,9 +303,27 @@ async function testBossConfig() {
   ];
   const missing = expectedTrades.filter((t) => !(boss.service_trades || []).includes(t));
   if (missing.length === 0) {
-    pass("All 13 service trades present");
+    pass(`All ${expectedTrades.length}+ service trades present`, (boss.service_trades || []).join(", "));
   } else {
     fail("Missing trades", missing.join(", "));
+  }
+
+  // Regression guard (2026-10-01): "general" is the fallback issue_type used by
+  // all four Vapi tool handlers when the model omits one
+  // (src/app/api/vapi/tools/route.ts). If it is missing from service_trades,
+  // unclassified calls fail the trade check and get wrongly declined.
+  if ((boss.service_trades || []).includes("general")) {
+    pass("Fallback trade 'general' present", "required by tool handlers");
+  } else {
+    fail("Fallback trade 'general' missing", "tool handlers default to 'general' — calls will be wrongly declined");
+  }
+
+  // Regression guard: hvac must stay. Alex priced AC repair at 150-600
+  // (questionnaire 4.9.5); only full central AC install is referred.
+  if ((boss.service_trades || []).includes("hvac")) {
+    pass("Minor HVAC in scope", "AC repair + heater repair");
+  } else {
+    fail("HVAC missing from trades", "Alex quoted AC repair pricing — should be in scope");
   }
 
   // Vapi assistant ID linked

@@ -14,9 +14,18 @@
  *   - Looks at the last end_call tool call's outcome parameter
  *   - Defaults to "unsure" if no end_call was made
  *
- * Run:  node scripts/import-vapi-calls.js
- * Dry run:  node scripts/import-vapi-calls.js --dry-run
- *   ↑ dry run prints what would be inserted without writing to DB
+ * Multi-region (added 2026-09-22):
+ *   - Routes each call to its boss via Vapi assistantId → boss.vapi_assistant_id
+ *   - Reads all VAPI_*_ASSISTANT_ID env vars (US, MY, SG, ID)
+ *   - Default scope: --regions us,my  (SG/ID ignored until assistants exist)
+ *   - Default is DRY-RUN. Pass --write to actually insert/update.
+ *
+ * Examples:
+ *   node scripts/import-vapi-calls.js                 # dry-run, all default regions
+ *   node scripts/import-vapi-calls.js --write          # write all default regions
+ *   node scripts/import-vapi-calls.js --regions my    # only MY H-Master
+ *   node scripts/import-vapi-calls.js --regions us,my --write
+ *   node scripts/import-vapi-calls.js --boss-id <uuid> --write
  */
 
 const fs = require("fs");
@@ -26,7 +35,6 @@ const { summarizeCall } = require("./lib/call-summary");
 
 const ENV = fs.readFileSync(path.join(__dirname, "..", ".env.local"), "utf-8");
 const VAPI_API_KEY = ENV.match(/VAPI_API_KEY=(.+)/)[1].trim();
-const VAPI_ASSISTANT_ID = ENV.match(/VAPI_ASSISTANT_ID=(.+)/)[1].trim();
 const SUPABASE_URL = ENV.match(/NEXT_PUBLIC_SUPABASE_URL=(.+)/)[1].trim();
 const SUPABASE_KEY = ENV.match(/SUPABASE_SERVICE_ROLE_KEY=(.+)/)[1].trim();
 // Also load all env vars into process.env so OpenAI client (and other
@@ -42,10 +50,43 @@ for (const line of ENV.split("\n")) {
   if (!process.env[k]) process.env[k] = v;
 }
 
-const DRY_RUN = process.argv.includes("--dry-run");
+/**
+ * Resolve the set of (region → Vapi assistantId) pairs to import for.
+ * Sources:
+ *   - US:  VAPI_ASSISTANT_ID (legacy top-level name) — keep backward compatible
+ *   - MY:  VAPI_MY_ASSISTANT_ID
+ *   - SG:  VAPI_SG_ASSISTANT_ID
+ *   - ID:  VAPI_ID_ASSISTANT_ID
+ * Empty / missing values are skipped. SG/ID are skipped when their assistant
+ * hasn't been created yet.
+ */
+function getAssistantMap() {
+  const map = {};
+  const us = ENV.match(/^VAPI_ASSISTANT_ID=(.+)$/m);
+  if (us && us[1].trim()) map.us = us[1].trim();
+  const my = ENV.match(/^VAPI_MY_ASSISTANT_ID=(.+)$/m);
+  if (my && my[1].trim()) map.my = my[1].trim();
+  const sg = ENV.match(/^VAPI_SG_ASSISTANT_ID=(.+)$/m);
+  if (sg && sg[1].trim()) map.sg = sg[1].trim();
+  const id = ENV.match(/^VAPI_ID_ASSISTANT_ID=(.+)$/m);
+  if (id && id[1].trim()) map.id = id[1].trim();
+  return map;
+}
+
+const DRY_RUN = !process.argv.includes("--write");
 const FORCE_DOWNLOAD = process.argv.includes("--force-download");
 // Skip download if recording already in Supabase Storage (idempotent)
 const SKIP_IF_PRESENT = !process.argv.includes("--force-download");
+
+// CLI args
+function arg(name) {
+  const i = process.argv.indexOf(`--${name}`);
+  if (i < 0) return null;
+  return process.argv[i + 1] && !process.argv[i + 1].startsWith("--") ? process.argv[i + 1] : true;
+}
+const REGIONS_ARG = arg("regions"); // e.g. "us,my"
+const BOSS_OVERRIDE = arg("boss-id"); // e.g. "<uuid>"
+const FORCE = process.argv.includes("--force"); // refresh even when no changes
 
 function vapiGet(url) {
   return new Promise((resolve, reject) => {
@@ -126,13 +167,13 @@ function storageObjectExists(path) {
   });
 }
 
-async function fetchAllCalls() {
+async function fetchCallsForAssistant(assistantId) {
   let all = [];
   let cursor = null;
   let page = 0;
   do {
     page++;
-    let url = `https://api.vapi.ai/call?assistantId=${VAPI_ASSISTANT_ID}&limit=100`;
+    let url = `https://api.vapi.ai/call?assistantId=${assistantId}&limit=100`;
     if (cursor) url += `&cursor=${cursor}`;
     const data = await vapiGet(url);
     const calls = Array.isArray(data) ? data : data.calls || data.results || [];
@@ -485,25 +526,33 @@ async function getExistingCallIds() {
   });
 }
 
-async function getBossId() {
+async function getBossIndex() {
+  // Pull every boss with a vapi_assistant_id and build:
+  //     { '<vapi_assistant_id>': { id, name, country, locale, currency, timezone } }
+  // Calls are routed by assistantId → boss via this index.
   return new Promise((resolve, reject) => {
     https
-      .get(`${SUPABASE_URL}/rest/v1/bosses?select=id&limit=1`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-      },
-      (res) => {
-        let b = "";
-        res.on("data", (c) => (b += c));
-        res.on("end", () => {
-          try {
-            const data = JSON.parse(b);
-            resolve(data[0]?.id || null);
-          } catch (e) {
-            reject(e);
-          }
-        });
-      },
-    )
+      .get(
+        `${SUPABASE_URL}/rest/v1/bosses?select=id,name,country,vapi_assistant_id,vapi_phone_number,locale,currency,timezone&vapi_assistant_id=not.is.null&limit=100`,
+        { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } },
+        (res) => {
+          let b = "";
+          res.on("data", (c) => (b += c));
+          res.on("end", () => {
+            try {
+              const arr = JSON.parse(b);
+              const idx = {};
+              for (const row of arr) {
+                if (!row.vapi_assistant_id) continue;
+                idx[row.vapi_assistant_id] = row;
+              }
+              resolve(idx);
+            } catch (e) {
+              reject(e);
+            }
+          });
+        },
+      )
       .on("error", reject);
   });
 }
@@ -572,157 +621,210 @@ function updateWorkOrder(callId, patch) {
 }
 
 async function main() {
-  console.log(DRY_RUN ? "🔍 DRY RUN MODE (no writes)\n" : "📥 Importing Vapi calls...\n");
+  console.log(DRY_RUN ? "🔍 DRY RUN MODE (no writes — pass --write to commit)\n" : "📥 Importing Vapi calls...\n");
 
-  const bossId = await getBossId();
-  if (!bossId) {
-    console.error("✗ No boss found in DB. Run schema.sql first.");
+  // 1. Resolve which regions to import
+  const assistantMap = getAssistantMap(); // { us, my, sg, id } → assistantId
+  if (Object.keys(assistantMap).length === 0) {
+    console.error("✗ No VAPI_*_ASSISTANT_ID env vars set. Check .env.local.");
+    process.exit(1);
+  }
+  const regions = REGIONS_ARG
+    ? String(REGIONS_ARG).split(",").map((r) => r.trim().toLowerCase()).filter(Boolean)
+    : ["us", "my"]; // default scope — SG/ID skipped until assistants exist
+  const skipped = regions.filter((r) => !assistantMap[r]);
+  const activeRegions = regions.filter((r) => assistantMap[r]);
+  if (skipped.length) {
+    console.warn(`⚠ Skipping regions without Vapi assistant: ${skipped.join(", ")}`);
+  }
+  if (activeRegions.length === 0) {
+    console.error(`✗ No regions resolved (requested: ${REGIONS_ARG || "us,my"}, available: ${Object.keys(assistantMap).join(", ")})`);
     process.exit(1);
   }
 
-  const allCalls = await fetchAllCalls();
-  console.log(`Fetched ${allCalls.length} total calls from Vapi`);
+  // 2. Pull all bosses with vapi_assistant_id, build assistantId → boss index
+  const bossIndex = await getBossIndex();
+  if (Object.keys(bossIndex).length === 0) {
+    console.error("✗ No bosses with vapi_assistant_id found. Run schema.sql + boss seeding first.");
+    process.exit(1);
+  }
+  console.log(`Boss index:`);
+  for (const [aid, boss] of Object.entries(bossIndex)) {
+    console.log(`  ${boss.country.padEnd(3)} | ${(boss.name || "").padEnd(28)} | ${aid}`);
+  }
+  console.log(`Regions: ${activeRegions.join(", ")}\n`);
 
-  // Filter: only inbound phone calls with status=ended and a customer number
-  const eligible = allCalls.filter(
-    (c) => c.type === "inboundPhoneCall" && c.status === "ended" && c.customer?.number,
-  );
-  const skippedType = allCalls.length - eligible.length;
-  console.log(`  ${eligible.length} are inbound phone calls (eligible for import)`);
-  console.log(`  ${skippedType} skipped (webCall / no customer number / not ended)`);
-
+  // 3. Pull existing call IDs (cross-boss)
   const existing = await getExistingCallIds();
-  console.log(`  ${existing.size} already in DB (will skip)`);
+  console.log(`Already in DB (any boss): ${existing.size} calls\n`);
 
-  let inserted = 0;
-  let updated = 0;
-  let skipped = 0;
-  let errored = 0;
+  // 4. Per region: fetch Vapi calls, route by assistantId, insert/refresh
+  let totalEligible = 0, totalInserted = 0, totalUpdated = 0, totalErrored = 0, totalSkippedType = 0, totalUnrouted = 0;
 
-  for (const callSummary of eligible) {
-    let detail;
-    try {
-      detail = await fetchCallDetail(callSummary.id);
-    } catch (e) {
-      console.error(`  ✗ Failed to fetch detail for ${callSummary.id.slice(0, 12)}: ${e.message}`);
-      errored++;
+  for (const region of activeRegions) {
+    const assistantId = assistantMap[region];
+    const boss = bossIndex[assistantId];
+    if (!boss) {
+      console.warn(`⚠ Region ${region} (assistant ${assistantId}) has no matching boss row in DB — skipping`);
       continue;
     }
+    console.log(`━━━ ${region.toUpperCase()} | ${boss.name} (${boss.id.slice(0, 8)}…) ━━━`);
+    const allCalls = await fetchCallsForAssistant(assistantId);
+    console.log(`  Fetched ${allCalls.length} calls from Vapi`);
 
-    const extracted = extractFromMessages(detail);
-    const record = buildWorkOrder(detail, extracted, bossId);
+    // Filter: only inbound phone calls with status=ended and a customer number
+    const eligible = allCalls.filter(
+      (c) => c.type === "inboundPhoneCall" && c.status === "ended" && c.customer?.number,
+    );
+    const skippedType = allCalls.length - eligible.length;
+    console.log(`  ${eligible.length} inbound phone calls eligible, ${skippedType} skipped`);
 
-    // Permanent storage: download audio from Vapi (URL expires in 30min)
-    // and re-host in our Supabase Storage so the link never expires.
-    if (record.recording_url && !DRY_RUN) {
-      const vapiAudioUrl = record.recording_url;
-      const storagePath = `call-recordings/${callSummary.id}.wav`;
-      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${storagePath}`;
-
-      try {
-        const exists = SKIP_IF_PRESENT ? await storageObjectExists(storagePath) : false;
-        if (exists) {
-          record.recording_url = publicUrl;
-        } else {
-          const audioBuffer = await downloadToBuffer(vapiAudioUrl);
-          if (audioBuffer.length < 100) {
-            // Likely an error page, not actual audio
-            console.warn(`  ⚠ Audio for ${callSummary.id.slice(0,12)} is only ${audioBuffer.length} bytes — skipping upload`);
-          } else {
-            await uploadToSupabaseStorage(storagePath, audioBuffer);
-            record.recording_url = publicUrl;
-          }
-        }
-      } catch (e) {
-        console.warn(`  ⚠ Could not migrate audio for ${callSummary.id.slice(0,12)}: ${e.message}`);
-        // Keep Vapi URL as fallback (will expire in 30min)
+    let inserted = 0, updated = 0, errored = 0, unrouted = 0;
+    for (const callSummary of eligible) {
+      if (callSummary.assistantId && callSummary.assistantId !== assistantId) {
+        unrouted++;
+        continue;
       }
-    }
+      if (BOSS_OVERRIDE && boss.id !== BOSS_OVERRIDE) continue;
 
-    const tag = `[${record.ai_decision.padEnd(8)}] ${record.customer_phone}`;
+      let detail;
+      try {
+        detail = await fetchCallDetail(callSummary.id);
+      } catch (e) {
+        console.error(`  ✗ Failed to fetch detail for ${callSummary.id.slice(0, 12)}: ${e.message}`);
+        errored++;
+        continue;
+      }
 
-    if (existing.has(callSummary.id)) {
-      // Refresh: update recording_url + transcript + summary on existing
-      // production records (Vapi presigned URLs expire every 30 min).
-      if (DRY_RUN) {
-        console.log(`  WOULD UPDATE ${tag} (refresh presigned URL)`);
-        updated++;
-      } else {
+      const extracted = extractFromMessages(detail);
+      const record = buildWorkOrder(detail, extracted, boss.id);
+
+      // Permanent storage: download audio from Vapi (URL expires in 30min)
+      // and re-host in our Supabase Storage so the link never expires.
+      if (record.recording_url && !DRY_RUN) {
+        const vapiAudioUrl = record.recording_url;
+        const storagePath = `call-recordings/${callSummary.id}.wav`;
+        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${storagePath}`;
+
         try {
-          // Always include legacy fields (always available in schema)
-          const patch = {
-            recording_url: record.recording_url,
-            transcript: record.transcript,
-            summary: record.summary,
-            issue_type: record.issue_type,
-            customer_zipcode: record.customer_zipcode,
-            quote_low: record.quote_low,
-            quote_high: record.quote_high,
-            pricing_breakdown: record.pricing_breakdown,
-            customer_name_extracted: record.customer_name_extracted,
-            intent_summary: record.intent_summary,
-            customer_tendency: record.customer_tendency,
-            mentioned_topics: record.mentioned_topics,
-            accepted_topics: record.accepted_topics,
-            rejected_topics: record.rejected_topics,
-            follow_up_priority: record.follow_up_priority,
-            follow_up_notes: record.follow_up_notes,
-            follow_up_recommended: record.follow_up_recommended,
-            transcript_coherence: record.transcript_coherence,
-          };
-          // Use updateOrIgnore — Supabase returns 400 if a field doesn't
-          // exist; we catch and retry without the new fields.
-          try {
-            await updateWorkOrder(callSummary.id, patch);
-          } catch (e) {
-            const msg = e.message || "";
-            if (msg.includes("Could not find") || msg.includes("column") || msg.includes("does not exist")) {
-              console.log(`  (some migration fields not yet run — retrying with subset)`);
-              const { customer_name_extracted, intent_summary, customer_tendency, mentioned_topics, accepted_topics, rejected_topics, follow_up_priority, follow_up_notes, follow_up_recommended, transcript_coherence, ...legacy } = patch;
-              try {
-                await updateWorkOrder(callSummary.id, { ...legacy, customer_name_extracted, intent_summary, customer_tendency, mentioned_topics, follow_up_priority, follow_up_notes, follow_up_recommended });
-              } catch (e2) {
-                try {
-                  await updateWorkOrder(callSummary.id, { ...legacy, accepted_topics, rejected_topics, transcript_coherence });
-                } catch (e3) {
-                  await updateWorkOrder(callSummary.id, legacy);
-                }
-              }
+          const exists = SKIP_IF_PRESENT ? await storageObjectExists(storagePath) : false;
+          if (exists) {
+            record.recording_url = publicUrl;
+          } else {
+            const audioBuffer = await downloadToBuffer(vapiAudioUrl);
+            if (audioBuffer.length < 100) {
+              console.warn(`  ⚠ Audio for ${callSummary.id.slice(0,12)} is only ${audioBuffer.length} bytes — skipping upload`);
             } else {
-              throw e;
+              await uploadToSupabaseStorage(storagePath, audioBuffer);
+              record.recording_url = publicUrl;
             }
           }
-          console.log(`  ↻ REFRESHED  ${tag} (new presigned URL, valid ~30min)`);
-          updated++;
         } catch (e) {
-          console.error(`  ✗ UPDATE FAILED ${tag}: ${e.message}`);
+          console.warn(`  ⚠ Could not migrate audio for ${callSummary.id.slice(0,12)}: ${e.message}`);
+        }
+      }
+
+      const tag = `[${region.toUpperCase()}/${record.ai_decision.padEnd(8)}] ${record.customer_phone}`;
+
+      if (existing.has(callSummary.id)) {
+        if (DRY_RUN) {
+          console.log(`  WOULD UPDATE ${tag} (refresh presigned URL)`);
+          updated++;
+        } else {
+          try {
+            const patch = {
+              recording_url: record.recording_url,
+              transcript: record.transcript,
+              summary: record.summary,
+              issue_type: record.issue_type,
+              customer_zipcode: record.customer_zipcode,
+              quote_low: record.quote_low,
+              quote_high: record.quote_high,
+              pricing_breakdown: record.pricing_breakdown,
+              customer_name_extracted: record.customer_name_extracted,
+              intent_summary: record.intent_summary,
+              customer_tendency: record.customer_tendency,
+              mentioned_topics: record.mentioned_topics,
+              accepted_topics: record.accepted_topics,
+              rejected_topics: record.rejected_topics,
+              follow_up_priority: record.follow_up_priority,
+              follow_up_notes: record.follow_up_notes,
+              follow_up_recommended: record.follow_up_recommended,
+              transcript_coherence: record.transcript_coherence,
+            };
+            try {
+              await updateWorkOrder(callSummary.id, patch);
+            } catch (e) {
+              const msg = e.message || "";
+              if (msg.includes("Could not find") || msg.includes("column") || msg.includes("does not exist")) {
+                console.log(`  (some migration fields not yet run — retrying with subset)`);
+                const legacy = {
+                  recording_url: record.recording_url,
+                  transcript: record.transcript,
+                  summary: record.summary,
+                  issue_type: record.issue_type,
+                  customer_zipcode: record.customer_zipcode,
+                  quote_low: record.quote_low,
+                  quote_high: record.quote_high,
+                  pricing_breakdown: record.pricing_breakdown,
+                };
+                try {
+                  await updateWorkOrder(callSummary.id, { ...legacy, customer_name_extracted: record.customer_name_extracted, intent_summary: record.intent_summary, customer_tendency: record.customer_tendency, mentioned_topics: record.mentioned_topics, follow_up_priority: record.follow_up_priority, follow_up_notes: record.follow_up_notes, follow_up_recommended: record.follow_up_recommended });
+                } catch (e2) {
+                  try {
+                    await updateWorkOrder(callSummary.id, { ...legacy, accepted_topics: record.accepted_topics, rejected_topics: record.rejected_topics, transcript_coherence: record.transcript_coherence });
+                  } catch (e3) {
+                    await updateWorkOrder(callSummary.id, legacy);
+                  }
+                }
+              } else {
+                throw e;
+              }
+            }
+            console.log(`  ↻ REFRESHED  ${tag}`);
+            updated++;
+          } catch (e) {
+            console.error(`  ✗ UPDATE FAILED ${tag}: ${e.message}`);
+            errored++;
+          }
+        }
+        continue;
+      }
+
+      if (DRY_RUN) {
+        console.log(`  WOULD INSERT ${tag} | ${(record.summary || "").slice(0, 80)}`);
+        inserted++;
+      } else {
+        try {
+          await insertWorkOrder(record);
+          console.log(`  ✓ INSERTED   ${tag} | ${(record.summary || "(no summary)").slice(0, 80)}`);
+          inserted++;
+        } catch (e) {
+          console.error(`  ✗ INSERT FAILED ${tag}: ${e.message}`);
           errored++;
         }
       }
-      continue;
     }
 
-    if (DRY_RUN) {
-      console.log(`  WOULD INSERT ${tag} | ${(record.summary || "").slice(0, 80)}`);
-      inserted++;
-    } else {
-      try {
-        await insertWorkOrder(record);
-        console.log(`  ✓ INSERTED   ${tag} | ${(record.summary || "(no summary)").slice(0, 80)}`);
-        inserted++;
-      } catch (e) {
-        console.error(`  ✗ INSERT FAILED ${tag}: ${e.message}`);
-        errored++;
-      }
-    }
+    console.log(`  → inserted:${inserted} updated:${updated} errored:${errored} unrouted:${unrouted}\n`);
+    totalEligible += eligible.length;
+    totalInserted += inserted;
+    totalUpdated += updated;
+    totalErrored += errored;
+    totalSkippedType += skippedType;
+    totalUnrouted += unrouted;
   }
 
-  console.log(`\n=== Summary ===`);
-  console.log(`  Eligible:  ${eligible.length}`);
-  console.log(`  Inserted:  ${inserted}${DRY_RUN ? " (dry run)" : ""}`);
-  console.log(`  Refreshed: ${updated}${DRY_RUN ? " (dry run)" : " (presigned URL refresh)"}`);
-  console.log(`  Errored:   ${errored}`);
-  console.log(`  Skipped type: ${skippedType} (webCall / no customer)`);
+  console.log(`=== TOTAL ===`);
+  console.log(`  Eligible:    ${totalEligible}`);
+  console.log(`  Inserted:    ${totalInserted}${DRY_RUN ? " (dry run)" : ""}`);
+  console.log(`  Refreshed:   ${totalUpdated}${DRY_RUN ? " (dry run)" : ""}`);
+  console.log(`  Errored:     ${totalErrored}`);
+  console.log(`  Unrouted:    ${totalUnrouted} (assistantId mismatch — should be 0)`);
+  console.log(`  Skipped:     ${totalSkippedType} (webCall / no customer / not ended)`);
+  if (DRY_RUN) {
+    console.log(`\n⚠ DRY RUN — no writes happened. Pass --write to commit.`);
+  }
 }
 
 main().catch((e) => {
