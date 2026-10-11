@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import OpenAI from "openai";
+import { MEETING_MINUTES_PROMPT } from "@/lib/meeting-minutes";
 
 /**
  * POST /api/human-handoff-demo/summarize
@@ -18,44 +19,6 @@ import OpenAI from "openai";
  */
 
 export const dynamic = "force-dynamic";
-
-const MEETING_MINUTES_PROMPT = `You are a meeting minutes generator for a home services contractor (handyman / home repair business) named Alex.
-
-Given the transcript of a phone call between a CUSTOMER and ALEX (the contractor), produce a structured summary.
-
-Output a JSON object with these EXACT fields:
-
-{
-  "summary": "<1-2 sentences: what the call was about>",
-  "intent": "<what the customer wanted — be specific>",
-  "key_facts": {
-    "name": "<customer name if mentioned, else null>",
-    "phone": "<customer phone if mentioned/confirmed, else null>",
-    "address": "<address if mentioned, else null>",
-    "issue": "<problem description in customer's own words, else null>",
-    "trade_needed": "<plumbing/electrical/hvac/handyman/painting/etc.>",
-    "timing": "<when they want service — 'asap' | 'tomorrow morning' | 'next week' | specific date>",
-    "urgency_signals": "<any urgency indicators — 'water everywhere', 'no heat', 'before guests arrive', etc.>",
-    "budget_signals": "<any price sensitivity mentioned>"
-  },
-  "action_items": [
-    "<concrete action Alex should take, e.g. 'Call Sarah back to confirm Mon 9am'>",
-    "<another action, or empty array if none>"
-  ],
-  "topics_mentioned": ["<short topic keywords>"],
-  "customer_tendency": "<overall vibe — 'urgent and ready to book' | 'shopping around' | 'just curious' | 'frustrated' | 'returning customer'>",
-  "follow_up_priority": "<'high' | 'medium' | 'low'>",
-  "follow_up_recommendation": "<specific next step — e.g. 'Confirm Mon 9am by SMS tonight. Send quote range $200-400.'>"
-}
-
-Rules:
-- Be CONCISE. Sentences ≤ 15 words.
-- Use customer's own words where possible.
-- If something wasn't mentioned, set field to null.
-- "intent" should be actionable, not vague.
-- "action_items" should be specific tasks.
-- "follow_up_priority" is high if there's any urgency signal (water damage, no heat, customer upset).
-- Return ONLY the JSON object, no markdown, no commentary.`;
 
 // Simple in-memory cache (cleared on server restart)
 const cache = new Map<string, object>();

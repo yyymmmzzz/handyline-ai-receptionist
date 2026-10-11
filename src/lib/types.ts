@@ -131,6 +131,14 @@ export interface WorkOrder {
   data_source?: "demo" | "production" | "test";
   // Multi-region field (migration 009). 'US' | 'SG' | 'MY' | 'ID' | ...
   country?: string | null;
+  // Which line picked up (migration 013): the AI receptionist, a human, or a
+  // handover where the AI started and a human took over.
+  call_type?: "ai" | "human" | "hybrid";
+  // Human-line metadata — null on AI-only calls.
+  human_answered?: boolean | null;
+  human_ring_seconds?: number | null;
+  /** Human-facing label for the line, e.g. "Handy Works direct line". */
+  line_label?: string | null;
   created_at: string;
   updated_at: string;
 }

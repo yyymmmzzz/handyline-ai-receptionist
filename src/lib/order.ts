@@ -3,6 +3,7 @@ import { getServiceClient } from "./supabase";
 import { notifyBossOfNewOrder } from "./notify";
 import { summarizeCall } from "./call-summary";
 import { summarizeWithFallback, computeSummaryHash } from "./openai-summarize";
+import { persistRecording } from "./recording-storage";
 import type { IssueType } from "./types";
 
 type DataSource = "production" | "test" | "demo";
@@ -215,6 +216,10 @@ export async function createOrUpdateWorkOrder(
   const summaryHash = computeSummaryHash(transcript, decision, issueType);
   console.log(`[order] Call summary via ${summarySource} for call ${callId} (hash=${summaryHash.slice(0, 8)}…)`);
 
+  // Copy the audio out of Vapi's presigned URL (expires in ~30 min) into our
+  // own storage so the dashboard's play link keeps working. Never throws.
+  const recordingUrl = await persistRecording(endOfCall.call?.recordingUrl, callId);
+
   const orderData = {
     boss_id: boss.id,
     customer_id: customerId,
@@ -245,7 +250,7 @@ export async function createOrUpdateWorkOrder(
     vapi_call_id: callId,
     data_source: dataSource,
     country: country,
-    recording_url: endOfCall.call?.recordingUrl || null,
+    recording_url: recordingUrl,
     transcript: transcript,
     status,
     updated_at: new Date().toISOString(),

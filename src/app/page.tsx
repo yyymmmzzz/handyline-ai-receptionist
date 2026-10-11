@@ -11,6 +11,13 @@ type DataSource = "demo" | "production" | "test";
 type StatusFilter = "all" | "urgent" | "pending" | "callback";
 type SourceFilter = "all" | DataSource;
 type CountryFilter = "all" | "US" | "MY";
+type CallTypeFilter = "all" | "ai" | "human";
+
+const CALL_TYPE_BADGE: Record<string, { label: string; classes: string }> = {
+  ai: { label: "AI", classes: "bg-blue-50 text-blue-700 border-blue-200" },
+  human: { label: "Human", classes: "bg-purple-50 text-purple-700 border-purple-200" },
+  hybrid: { label: "Hybrid", classes: "bg-teal-50 text-teal-700 border-teal-200" },
+};
 
 const SOURCE_BADGE: Record<DataSource, { label: string; classes: string; emoji: string }> = {
   production: { label: "production", classes: "bg-green-50 text-green-700 border-green-200", emoji: "🟢" },
@@ -34,6 +41,13 @@ function DashboardPageInner() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [countryFilter, setCountryFilter] = useState<CountryFilter>(initialCountry);
+  const [callTypeFilter, setCallTypeFilter] = useState<CallTypeFilter>(
+    (() => {
+      const c = (searchParams.get("line") || "").toLowerCase();
+      if (c === "ai" || c === "human") return c;
+      return "all";
+    })(),
+  );
 
   useEffect(() => {
     const supabase = getBrowserClient();
@@ -83,8 +97,12 @@ function DashboardPageInner() {
     };
   }, []);
 
-  // Apply both filters (status + data source)
+  // Apply both filters (status + data source + call type)
   const filtered = orders.filter((o) => {
+    // Call type filter (ai | human | hybrid)
+    if (callTypeFilter !== "all") {
+      if ((o.call_type || "ai") !== callTypeFilter) return false;
+    }
     // Source filter
     if (sourceFilter !== "all") {
       if ((o.data_source || "production") !== sourceFilter) return false;
@@ -103,6 +121,13 @@ function DashboardPageInner() {
     urgent: orders.filter((o) => o.ai_decision === "urgent" || o.status === "urgent").length,
     pending: orders.filter((o) => o.status === "pending").length,
     callback: orders.filter((o) => o.status === "callback" || o.ai_decision === "unsure").length,
+  };
+
+  // Call-type counts for the filter chips
+  const callTypeCounts = {
+    all: orders.length,
+    ai: orders.filter((o) => (o.call_type || "ai") === "ai").length,
+    human: orders.filter((o) => o.call_type === "human").length,
   };
 
   // Source counts for the filter chips
@@ -158,6 +183,40 @@ function DashboardPageInner() {
             >
               {label}
             </a>
+          );
+        })}
+      </div>
+
+      {/* Call type filter — which line answered: AI or a human */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-xs text-gray-500 uppercase tracking-wide">Answered by:</span>
+        {([
+          { key: "all", label: "All lines" },
+          { key: "ai", label: "🤖 AI" },
+          { key: "human", label: "👤 Human" },
+        ] as const).map((c) => {
+          const active = callTypeFilter === c.key;
+          const colorClass =
+            c.key === "human"
+              ? active
+                ? "bg-purple-600 text-white border-purple-600"
+                : "bg-white text-purple-700 border-purple-200 hover:bg-purple-50"
+              : c.key === "ai"
+                ? active
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white text-blue-700 border-blue-200 hover:bg-blue-50"
+                : active
+                  ? "bg-gray-900 text-white border-gray-900"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50";
+          return (
+            <button
+              key={c.key}
+              onClick={() => setCallTypeFilter(c.key)}
+              className={`px-3 py-1.5 text-sm rounded-md border font-medium ${colorClass}`}
+            >
+              {c.label}{" "}
+              <span className="ml-1 text-xs opacity-75">({callTypeCounts[c.key]})</span>
+            </button>
           );
         })}
       </div>
@@ -243,6 +302,8 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
 function WorkOrderRow({ order }: { order: WorkOrder }) {
   const source = (order.data_source || "production") as DataSource;
   const badge = SOURCE_BADGE[source];
+  const callType = order.call_type || "ai";
+  const callTypeBadge = CALL_TYPE_BADGE[callType];
   // Country → currency symbol (denormalized display)
   const currencySymbol =
     order.country === "MY" ? "RM" :
@@ -265,6 +326,16 @@ function WorkOrderRow({ order }: { order: WorkOrder }) {
             <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border ${decisionColor(order.ai_decision)}`}>
               {decisionLabel(order.ai_decision)}
             </span>
+            {/* Who actually picked up — only badge the non-AI cases so the
+                list stays readable once almost everything is AI. */}
+            {callType !== "ai" && callTypeBadge && (
+              <span
+                className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border ${callTypeBadge.classes}`}
+                title={order.line_label || "Answered by a human"}
+              >
+                👤 {callTypeBadge.label}
+              </span>
+            )}
             <span className={`inline-flex items-center px-2 py-0.5 text-xs rounded ${statusColor(order.status)}`}>
               {statusLabel(order.status)}
             </span>
