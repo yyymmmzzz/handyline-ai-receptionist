@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { SAMPLE_TRANSCRIPTS, type SampleTranscript, type TranscriptTurn } from "@/lib/sample-transcripts";
 
@@ -55,39 +55,81 @@ export default function HumanHandoffDemoPage() {
     [selectedId]
   );
 
-  const fullTranscript = useMemo(
-    () => selected.turns.map((t) => `${t.speaker}: ${t.text}`).join("\n"),
-    [selected]
+  // Keep the in-flight request so switching samples can cancel it instead of
+  // racing a stale response over the new one.
+  const abortRef = useRef<AbortController | null>(null);
+  // StrictMode double-invokes effects in dev; without this guard every page
+  // load fires two POSTs for the same transcript.
+  const autoRunRef = useRef<string | null>(null);
+
+  const generate = useCallback(
+    async (sample: SampleTranscript, signal?: AbortSignal) => {
+      setLoading(true);
+      setError(null);
+      setMinutes(null);
+      setMeta(null);
+      setCheckedItems(new Set());
+      try {
+        const transcript = sample.turns
+          .map((t) => `${t.speaker}: ${t.text}`)
+          .join("\n");
+        const res = await fetch("/api/human-handoff-demo/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            transcript,
+            customerName: sample.customerName,
+            callerPhone: sample.callerPhone,
+          }),
+          signal,
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        setMinutes(data.summary);
+        setMeta({
+          tokens: data.tokens || 0,
+          cost: data.cost || 0,
+          cached: data.cached || false,
+        });
+      } catch (e: any) {
+        // A cancelled request was superseded by a newer selection — stay quiet.
+        if (e?.name === "AbortError") return;
+        setError(e?.message || "Failed to generate minutes");
+      } finally {
+        if (!signal?.aborted) setLoading(false);
+      }
+    },
+    []
   );
 
-  async function handleSummarize() {
-    setLoading(true);
-    setError(null);
-    setMinutes(null);
-    setMeta(null);
-    setCheckedItems(new Set());
-    try {
-      const res = await fetch("/api/human-handoff-demo/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transcript: fullTranscript,
-          customerName: selected.customerName,
-          callerPhone: selected.callerPhone,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      setMinutes(data.summary);
-      setMeta({ tokens: data.tokens || 0, cost: data.cost || 0, cached: data.cached || false });
-    } catch (e: any) {
-      setError(e.message || "Failed to generate minutes");
-    } finally {
-      setLoading(false);
-    }
+  // Auto-generate on mount and whenever the selected sample changes, so the
+  // minutes are already on screen without anyone clicking a button.
+  useEffect(() => {
+    const sample =
+      SAMPLE_TRANSCRIPTS.find((s) => s.id === selectedId) || SAMPLE_TRANSCRIPTS[0];
+
+    if (autoRunRef.current === selectedId) return;
+    autoRunRef.current = selectedId;
+
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    generate(sample, ctrl.signal);
+
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  function handleRegenerate() {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    autoRunRef.current = selectedId;
+    generate(selected, ctrl.signal);
   }
 
   function toggleCheckItem(i: number) {
@@ -186,11 +228,12 @@ export default function HumanHandoffDemoPage() {
                 Call Transcript
               </h3>
               <button
-                onClick={handleSummarize}
+                onClick={handleRegenerate}
                 disabled={loading}
-                className="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                title="Minutes are generated automatically — use this only to retry"
+                className="px-4 py-1.5 bg-white text-slate-700 text-sm font-medium rounded-md border border-slate-300 hover:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
               >
-                {loading ? "Generating…" : "Generate Meeting Minutes"}
+                {loading ? "Generating…" : "Regenerate"}
               </button>
             </div>
 
@@ -246,11 +289,7 @@ export default function HumanHandoffDemoPage() {
               <div className="bg-white border-2 border-dashed border-slate-200 rounded-lg p-8 text-center">
                 <div className="text-slate-400 text-4xl mb-2">📋</div>
                 <p className="text-sm text-slate-600">
-                  Click <strong>Generate Meeting Minutes</strong> to see
-                  the AI summary.
-                </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Uses OpenAI gpt-4o-mini · results cached for replay
+                  Minutes appear here automatically.
                 </p>
               </div>
             )}
@@ -260,6 +299,9 @@ export default function HumanHandoffDemoPage() {
                 <div className="inline-block animate-pulse text-slate-400 text-2xl mb-2">⏳</div>
                 <p className="text-sm text-slate-600">
                   Generating meeting minutes from transcript…
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  This runs automatically each time you pick a sample
                 </p>
               </div>
             )}
