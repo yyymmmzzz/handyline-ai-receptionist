@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getBrowserClient } from "@/lib/supabase";
-import { decisionLabel, decisionColor, statusLabel, statusColor, relativeTime, formatDateTime } from "@/lib/utils";
+import { decisionLabel, decisionColor, statusLabel, statusColor, relativeTime, formatDateTime, aiQualityLabel } from "@/lib/utils";
 import type { WorkOrder } from "@/lib/types";
 
 type DataSource = "demo" | "production" | "test";
@@ -366,6 +366,14 @@ function WorkOrderRow({ order }: { order: WorkOrder }) {
                 {currencySymbol}{order.quote_low}–{order.quote_high}
               </span>
             ) : null}
+            {order.ai_quality_flag && (
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium rounded border bg-red-100 text-red-800 border-red-200"
+                title={aiQualityLabel(order.ai_quality_flag)}
+              >
+                ⚠ AI misbehaved
+              </span>
+            )}
             <span
               className={`inline-flex items-center px-1.5 py-0.5 text-xs font-medium rounded border ${badge.classes}`}
               title={`Data source: ${badge.label}`}

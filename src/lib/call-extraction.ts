@@ -16,6 +16,8 @@ import type {
 
 export interface ExtractedCallData {
   decision: AIDecision;
+  /** Set when the AI visibly misbehaved (repeated turn, opener echo, …). */
+  aiQualityFlags: AIQualityFlag[];
   /**
    * Where the decision came from:
    * - "tool"    — the AI called end_call / flag_urgent / flag_uncertain.
@@ -392,9 +394,15 @@ export function extractCallData(
     summary = endOfCall.analysis.summary;
   }
 
+  // Did the AI visibly misbehave? (repeated a line, echoed its opener, never
+  // let the customer speak) — flagged so the call is visible without reading
+  // the transcript.
+  const aiQualityFlags = detectAIQualityIssues(buildTranscript(endOfCall));
+
   return {
     decision,
     decisionSource,
+    aiQualityFlags,
     reason,
     issueType,
     summary,
@@ -417,6 +425,59 @@ export function tryParseJson(value: unknown): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Detect the AI misbehaving — the "opener echo" of 2026-10-14 and anything
+ * shaped like it.
+ *
+ * A customer asked "do you guys install TV now?" and got "What's the issue?"
+ * three times in a row. Nothing in the work order said "this call went
+ * wrong"; the summary just said "Customer inquired about TV mounting". The
+ * only way to notice was to read every transcript by hand.
+ *
+ * So the symptom is detected mechanically and stored on the work order:
+ *   "repeated_turn"  — the AI said the same thing twice in a row
+ *   "opener_echo"    — the AI repeated its opening question after the
+ *                      customer had already spoken
+ *   "no_customer_turn"— the AI talked several times and the customer never
+ *                      got a word in (a dead line)
+ *
+ * This is the answer to "the AI must not flake": the flaking is not hidden,
+ * it is measured on every call.
+ */
+export type AIQualityFlag = "repeated_turn" | "opener_echo" | "no_customer_turn";
+
+const OPENER_RE = /what['\u2019]?s the issue\b|what is the issue\b/i;
+
+export function detectAIQualityIssues(
+  transcript: Array<{ role: string; text: string }>,
+): AIQualityFlag[] {
+  const flags = new Set<AIQualityFlag>();
+  const bots = transcript.filter((t) => t.role === "assistant").map((t) => t.text.trim());
+  const customers = transcript.filter((t) => t.role === "user").map((t) => t.text.trim());
+
+  // The AI said the same thing twice in a row (ignoring case and punctuation).
+  for (let i = 1; i < bots.length; i++) {
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
+    if (norm(bots[i]) && norm(bots[i]) === norm(bots[i - 1])) {
+      flags.add("repeated_turn");
+      if (OPENER_RE.test(bots[i])) flags.add("opener_echo");
+      break;
+    }
+  }
+
+  // The opening question came back after the customer had already spoken.
+  if (bots.length >= 2 && OPENER_RE.test(bots[bots.length - 1])) {
+    flags.add("opener_echo");
+  }
+
+  // The AI talked three or more times and the customer never replied.
+  if (bots.length >= 3 && customers.length === 0) {
+    flags.add("no_customer_turn");
+  }
+
+  return [...flags];
 }
 
 export function buildTranscript(endOfCall: VapiWebhookPayload["message"]): Array<{ role: string; text: string; ts?: number }> {

@@ -76,3 +76,28 @@ export function statusColor(status: string): string {
     cancelled: "bg-gray-50 text-gray-500",
   }[status] || "bg-gray-50 text-gray-700";
 }
+
+/**
+ * Human-readable label for the AI quality flags on a work order.
+ *
+ * These mark calls where the AI visibly misbehaved — e.g. it repeated its
+ * opening question after the customer had already spoken (the 2026-10-14
+ * bug). They are warnings for a human to look at, not automated decisions.
+ */
+export function aiQualityLabel(flags: string | null | undefined): string {
+  if (!flags) return "";
+  const parts = flags.split(",").map((f) => f.trim()).filter(Boolean);
+  const labels: Record<string, string> = {
+    repeated_turn: "AI repeated itself",
+    opener_echo: "AI echoed its opening question",
+    no_customer_turn: "Customer never got a word in",
+  };
+  if (!parts.length) return "";
+  return parts.map((p) => labels[p] || p).join(" · ");
+}
+
+export function aiQualityColor(flags: string | null | undefined): string {
+  return flags
+    ? "bg-red-100 text-red-800 border-red-200"
+    : "bg-gray-100 text-gray-800 border-gray-200";
+}

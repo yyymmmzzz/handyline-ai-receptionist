@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { getBrowserClient } from "@/lib/supabase";
-import { decisionLabel, decisionColor, statusLabel, statusColor, formatDateTime, cn } from "@/lib/utils";
+import { decisionLabel, decisionColor, statusLabel, statusColor, formatDateTime, cn, aiQualityLabel } from "@/lib/utils";
 import type { WorkOrder, Boss, PricingBreakdown } from "@/lib/types";
 
 export default function WorkOrderDetailPage() {
@@ -141,6 +141,12 @@ export default function WorkOrderDetailPage() {
               <span className="text-xs text-gray-500 capitalize">· {order.issue_type}</span>
             )}
           </div>
+          {order.ai_quality_flag && (
+            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+              <span className="font-semibold">AI misbehaved on this call:</span>{" "}
+              {aiQualityLabel(order.ai_quality_flag)}. Listen to the recording before trusting this one.
+            </div>
+          )}
           <h1 className="text-2xl font-bold text-gray-900">
             {order.summary || "Work order"}
           </h1>

@@ -2,6 +2,7 @@ import type { Boss, VapiWebhookPayload, AIDecision, WorkOrder, PricingBreakdown 
 import {
   extractCallData,
   buildTranscript,
+  detectAIQualityIssues,
 } from "./call-extraction";
 import { getServiceClient } from "./supabase";
 import { notifyBossOfNewOrder } from "./notify";
@@ -176,12 +177,19 @@ export async function createOrUpdateWorkOrder(
   const customerName = (endOfCall.call?.customer?.name as string | undefined) || null;
 
   // Extract AI decision from tool calls
-  const { decision: extractedDecision, reason: extractedReason, decisionSource, issueType, summary, quoteLow, quoteHigh, pricingBreakdown, customerAddress, customerZipcode, issueDetails, preferredTime, acceptedTopics: acceptedTopicsRaw, rejectedTopics: rejectedTopicsRaw } =
+  const { decision: extractedDecision, reason: extractedReason, decisionSource, aiQualityFlags, issueType, summary, quoteLow, quoteHigh, pricingBreakdown, customerAddress, customerZipcode, issueDetails, preferredTime, acceptedTopics: acceptedTopicsRaw, rejectedTopics: rejectedTopicsRaw } =
     extractCallData(boss, endOfCall);
 
   // The transcript is needed both for the summary and for the outcome
   // fallback below, so build it before either runs.
   const transcript = buildTranscript(endOfCall);
+
+  // Did the AI visibly misbehave (repeated a line, echoed its opener, never
+  // let the customer speak)? Flag it on the work order so a bad call is
+  // visible without reading the transcript.
+  if (aiQualityFlags && aiQualityFlags.length) {
+    console.warn(`[order] AI quality flags on ${callId}: ${aiQualityFlags.join(", ")}`);
+  }
 
   // The AI sometimes narrates its closing line and never calls the end_call
   // tool. The tool call is the source of truth when it exists — but when it
@@ -307,6 +315,7 @@ export async function createOrUpdateWorkOrder(
     recording_url: recordingUrl,
     transcript: transcript,
     status,
+    ai_quality_flag: aiQualityFlags.length ? aiQualityFlags.join(",") : null,
     updated_at: new Date().toISOString(),
   };
 
@@ -351,6 +360,9 @@ export async function createOrUpdateWorkOrder(
     rejected_topics: orderData.rejected_topics,
     transcript_coherence: orderData.transcript_coherence,
   };
+  const newFields017 = {
+    ai_quality_flag: orderData.ai_quality_flag,
+  };
 
   /**
    * Never replace a good value with a worse one on re-processing.
@@ -373,12 +385,16 @@ export async function createOrUpdateWorkOrder(
     ) {
       orderData.recording_url = priorRecording;
     }
-    for (const key of Object.keys(newFields005)) {
-      const next = (newFields005 as Record<string, unknown>)[key];
-      const prev = (existing as unknown as Record<string, unknown>)[key];
-      if (next === null || next === undefined) {
-        if (prev !== null && prev !== undefined) {
-          (newFields005 as Record<string, unknown>)[key] = prev;
+    // A flag we already found must not be wiped by a re-processing run that
+    // no longer sees the problem (e.g. a trimmed transcript).
+    for (const group of [newFields005, newFields017]) {
+      for (const key of Object.keys(group)) {
+        const next = (group as Record<string, unknown>)[key];
+        const prev = (existing as unknown as Record<string, unknown>)[key];
+        if (next === null || next === undefined) {
+          if (prev !== null && prev !== undefined) {
+            (group as Record<string, unknown>)[key] = prev;
+          }
         }
       }
     }
@@ -412,7 +428,7 @@ export async function createOrUpdateWorkOrder(
     const msg = e instanceof Error ? e.message : String(e);
     console.warn(`[order] Full write failed (${msg.slice(0, 80)}) — trying 005 + legacy`);
     try {
-      order = await tryWrite({ ...legacyFields, ...newFields005 });
+      order = await tryWrite({ ...legacyFields, ...newFields005, ...newFields017 });
     } catch (e2) {
       const msg2 = e2 instanceof Error ? e2.message : String(e2);
       console.warn(`[order] 005+legacy write failed (${msg2.slice(0, 80)}) — trying legacy only`);

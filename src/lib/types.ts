@@ -118,6 +118,8 @@ export interface WorkOrder {
   issue_details: string | null;
   preferred_time: string | null;
   ai_decision: AIDecision;
+  /** Comma-separated AI misbehaviour flags (repeated_turn, opener_echo, …). */
+  ai_quality_flag?: string | null;
   ai_decision_reason: string | null;
   quote_low: number | null;
   quote_high: number | null;
