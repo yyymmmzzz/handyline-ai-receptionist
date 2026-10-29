@@ -2,6 +2,39 @@
 
 **Date:** 2026-09-13 · **Status:** Design (v0.1) · **Author:** Mavis
 
+> ## ⚠️ 实现状态更新（2026-10-29）
+>
+> **下面这份设计里的"方案 A（Vapi transferCall）没有采用，最终做的是另一条路。**
+> 原因：Vapi 的转接行为当时无法从我们这边验证（transfer 文档 404），而真人线**不能建立在
+> 一个没验证过的假设上**。2026-10-11 起实际实现的是 **Twilio 独立真人线**：
+>
+> ```
+> 客户拨打真人线号码（Twilio 拥有的号）
+>   → /api/human-line/voice      响铃 Alex 的手机（20s）
+>      ├─ 接听 → <Record> 双声道录音 + 播报录音提示 → 桥接双方
+>      └─ 无人接听 → /api/human-line/no-answer（ai / voicemail / hangup）
+>   → 通话结束 → /api/human-line/recording
+>      → 录音存 Supabase → 转写 → 摘要 → work_orders（call_type='human'）
+> ```
+>
+> 与设计稿的差异：
+> | 设计稿 | 实际实现 |
+> |---|---|
+> | 方案 A：Vapi `transferCall` 转给 Alex | Twilio 独立真人线（第二个号码） |
+> | 新建 `human_calls` 表 | 不新建表 —— 复用 `work_orders`，用 `call_type='human'` 区分 |
+> | 转写用 Vapi 的 transcript | 转写用 `src/lib/transcribe.ts`（OpenAI Whisper） |
+> | 未考虑回调接口鉴权 | 6 个 Twilio 回调现在全部校验 `X-Twilio-Signature` |
+>
+> **当前唯一阻塞：Twilio 账号名下 0 个号码**（Trial 且已过期）。买号后：
+> ```bash
+> node scripts/activate-human-line.js +1XXXXXXXXXX   # 一键接线
+> node scripts/check-human-line.js                  # 复查就绪状态
+> node scripts/test-human-line.js                   # 端到端自测（15 项）
+> ```
+> 下面这份设计稿保留作为决策记录，**不要照它实施**。
+
+---
+
 The first thing to answer: **how do human-answered calls get recorded?** The rest of the design follows from that answer.
 
 ---
