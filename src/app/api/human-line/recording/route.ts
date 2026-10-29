@@ -3,6 +3,10 @@ import { getServiceClient } from "@/lib/supabase";
 import { persistRecording } from "@/lib/recording-storage";
 import { transcribeAudioSafe, plainTextToTranscript } from "@/lib/transcribe";
 import { summarizeWithFallback } from "@/lib/openai-summarize";
+import {
+  generateMeetingMinutes,
+  minutesToOrderFields,
+} from "@/lib/meeting-minutes";
 import { collectFormParams, verifyTwilioSignature, rejectInvalidSignature } from "@/lib/twilio-signature";
 
 /**
@@ -86,10 +90,36 @@ export async function POST(req: NextRequest) {
       { callId: callSid },
     );
 
+    // 3b) The notes a person would have taken: key facts, action items, the
+    //     recommended next step. This used to live only on a demo page fed
+    //     with fake transcripts; now it runs on every real human call.
+    //     Failure is non-fatal — the call and its recording still land.
+    const minutesResult = await generateMeetingMinutes(transcriptText, {
+      customerName: params.CallerName || null,
+      callerPhone: from || null,
+    });
+
     // 4) A human answered, so there is no AI decision to record. Mark it
     //    human_handled so the dashboard does not pretend an AI triaged it.
     const decision = transcriptText ? "human_handled" : "unsure";
     const status = transcriptText ? "pending" : "callback";
+
+    // The minutes are the richer, human-shaped summary, so they win over the
+    // triage summary on the columns both of them can fill.
+    const minutesFields = minutesResult.minutes
+      ? minutesToOrderFields(minutesResult.minutes)
+      : {};
+
+    // ...except the priority: never let a softer reading downgrade an urgent
+    // triage result. Take whichever signal is louder.
+    const PRIORITY_RANK: Record<string, number> = { none: 0, low: 1, medium: 2, high: 3 };
+    const triagePriority = summary.followUpPriority || "none";
+    const minutesPriority = (minutesFields.follow_up_priority as string) || "none";
+    const finalPriority =
+      (PRIORITY_RANK[triagePriority] ?? 0) >= (PRIORITY_RANK[minutesPriority] ?? 0)
+        ? triagePriority
+        : minutesPriority;
+    if (minutesFields.follow_up_priority) minutesFields.follow_up_priority = finalPriority;
 
     const row = {
       boss_id: boss.id,
@@ -124,6 +154,10 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString(),
       // Surfaced in the admin log so a silent LLM outage is visible.
       ...(source === "llm" ? {} : { transcript_coherence: "low" }),
+      // The structured notes, plus the columns they map onto.
+      ...minutesFields,
+      human_minutes: minutesResult.minutes ?? null,
+      human_minutes_source: minutesResult.minutes ? minutesResult.source : "none",
     };
 
     const { data: inserted, error } = await supabase
@@ -138,7 +172,7 @@ export async function POST(req: NextRequest) {
     }
 
     console.log(
-      `[human-line] ${callSid} → work order ${inserted.id} (summary via ${source}, transcript ${transcriptText.length} chars)`,
+      `[human-line] ${callSid} → work order ${inserted.id} (summary via ${source}, transcript ${transcriptText.length} chars, minutes via ${minutesResult.source}${minutesResult.error ? `: ${minutesResult.error}` : ""})`,
     );
 
     return NextResponse.json({
@@ -146,6 +180,8 @@ export async function POST(req: NextRequest) {
       workOrderId: inserted.id,
       transcribed: !!transcriptText,
       summarySource: source,
+      minutesSource: minutesResult.source,
+      minutesError: minutesResult.error ?? null,
       recordingUrl: audioUrl,
     });
   } catch (err) {

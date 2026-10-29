@@ -79,7 +79,8 @@ handyline-ai-receptionist/
 │   │   ├── page.tsx            Landing
 │   │   ├── orders/[id]/        Work order detail
 │   │   ├── preview/            Customer shareable preview
-│   │   ├── human-handoff-demo/ Standalone meeting-minutes demo
+│   │   ├── human-calls/         真人通话：录音 + 转写 + AI 纪要
+│   │   ├── human-handoff-demo/ → 旧 demo 地址，已重定向到 /human-calls
 │   │   ├── config/             Boss config panel
 │   │   ├── landing/            Marketing landing
 │   │   ├── sea/                SEA market page
@@ -98,7 +99,11 @@ handyline-ai-receptionist/
 │   │       │   ├── reclassify/            Manual re-classification
 │   │       │   └── llm-stats/             LLM usage & cost
 │   │       ├── v1/                       External partner API
-│   │       ├── human-handoff-demo/summarize/  OpenAI meeting minutes
+│   │       ├── human-line/              真人接听线（Twilio 独立号码）
+│   │       │   ├── voice/               来电 → 响 Alex 手机（带签名校验）
+│   │       │   ├── recording/           录音回调 → 转写 → 摘要 → AI 纪要 → 工单
+│   │       │   ├── no-answer/           无人接听兜底（ai / voicemail / hangup）
+│   │       │   └── status/              真人线就绪状态（供 /human-calls 展示）
 │   │       └── dev/                      Dev seed / clear / simulate
 │   ├── components/ui/          shadcn/ui primitives
 │   └── lib/                    Business logic — the heart of the app
@@ -109,7 +114,10 @@ handyline-ai-receptionist/
 │       ├── vapi-event-handler.ts Dispatch Vapi events
 │       ├── emergency-call.ts   Twilio retry logic
 │       ├── notify.ts           Boss notification (SMS/email)
-│       ├── sample-transcripts.ts Hard-coded demo transcripts
+│       ├── meeting-minutes.ts  AI 会议纪要（真人线生产路径使用）
+│       ├── twilio-signature.ts Twilio 回调签名校验（fail closed）
+│       ├── recording-storage.ts 录音转存 Supabase Storage（永久链接）
+│       ├── transcribe.ts       录音 → 转写
 │       ├── types.ts            DB types (bosses, work_orders, ...)
 │       ├── supabase.ts         Supabase client (anon + service role)
 │       └── utils.ts            Misc utilities
@@ -397,20 +405,34 @@ TwiML templates live in `src/app/api/twilio/emergency-twiml/route.ts`.
 
 ---
 
-## 9. Human Handoff demo (`/human-handoff-demo`)
+## 9. 真人通话 (`/human-calls`) — 真人接听线
 
-Standalone demo that runs the meeting-minutes pipeline without involving
-Vapi. The user picks one of 4 hard-coded transcripts, the page POSTs to
-`/api/human-handoff-demo/summarize`, which calls GPT-4o-mini with
-`response_format: json_object` and returns a structured `MeetingMinutes`
-object (attendees, decisions, action items, follow-ups).
+真人接听线是一条**独立的 Twilio 号码**（不是 Vapi AI 线）：
+来电 → 响 Alex 的手机 → 接听则双声道录音 + 桥接 → 无人接听走兜底。
 
-Cached by SHA-256 of the transcript on Supabase to avoid repeat OpenAI
-calls. The page is fully client-rendered.
+**这一节以前是一个 demo。** `/human-handoff-demo` 用 4 段写死的样例转写跑
+"会议纪要"提示词，展示"如果真人接了电话，AI 会记下什么"。2026-10-29 这个
+能力被接进生产路径，假数据全部删除：
 
-This is a **demo**; real human handoff via Vapi's `transferCall` tool
-with continuous recording is the Phase 1 plan in
-`docs/HUMAN-HANDOFF-DESIGN.md`.
+| 步骤 | 位置 | 做了什么 |
+| --- | --- | --- |
+| 来电 | `/api/human-line/voice` | 校验 `X-Twilio-Signature`，生成响铃 TwiML |
+| 录音 | `/api/human-line/recording` | 先把音频转存 Supabase Storage（永久链接），再转写 → 摘要 → **AI 纪要** → upsert 工单 |
+| 兜底 | `/api/human-line/no-answer` | 无人接听 → ai / voicemail / hangup，每种都留工单 |
+| 状态 | `/api/human-line/status` | 真人线是否已开通、Twilio 名下号码、已有多少通 |
+
+**AI 纪要**（`src/lib/meeting-minutes.ts`）：GPT-4o-mini + `json_object`，
+产出 key_facts（姓名/电话/地址/问题/工种/时间/紧急信号/预算信号）、
+action_items（可勾选的待办）、跟进优先级、建议的下一步。
+结果存在 `work_orders.human_minutes`（JSONB），同时映射回普通工单字段
+（summary / intent_summary / issue_type / follow_up_*），所以真人来电在主
+Dashboard 里和 AI 来电长得一样，但多了一份"人会写的纪要"。
+
+页面：`/human-calls`（列表 + 录音播放 + 转写 + 纪要），
+`/human-handoff-demo` 现在重定向到那里。
+
+**注意**：真人线还没有号码（Twilio 账号名下 0 个号码，试用已过期），
+买号并接线（`scripts/activate-human-line.js`）之后才会有真实来电进来。
 
 ---
 
@@ -472,7 +494,10 @@ The import script falls back to the regex version automatically.
 | `/api/boss/callback` | POST | Boss phone callback |
 | `/api/admin/reclassify` | POST | Manual re-classification |
 | `/api/admin/llm-stats` | GET | LLM cost analytics |
-| `/api/human-handoff-demo/summarize` | POST | GPT-4o-mini meeting minutes |
+| `/api/human-line/voice` | POST | 真人线来电 → 响铃 TwiML |
+| `/api/human-line/recording` | POST | 录音 → 转写 → 摘要 → AI 纪要 → 工单 |
+| `/api/human-line/no-answer` | POST | 无人接听兜底 |
+| `/api/human-line/status` | GET | 真人线就绪状态 |
 | `/api/v1/assistants` | GET/POST | Partner API |
 | `/api/v1/singlish-eval` | POST | Singlish evaluation |
 | `/api/dev/seed` | POST | Dev seed |

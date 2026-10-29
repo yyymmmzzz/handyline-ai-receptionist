@@ -119,15 +119,25 @@ productized surface of Bookloh's contractor operations stack.
 - The work order is flagged `urgent` and pinned to the top of the
   dashboard.
 
-### 4.3 Human handoff (demo shipped; full integration in flight)
+### 4.3 Human handoff (production line built; waiting on a phone number)
 
 - AI can call `flag_uncertain` to defer to a human dispatcher when it
   cannot resolve the call itself.
-- A standalone demo at `/human-handoff-demo` shows the meeting-minutes
-  pipeline: raw transcript → GPT-4o-mini structured summary (attendees,
-  decisions, action items, follow-ups) → JSON output cached by SHA-256.
-- Real integration (`transferCall` Vapi tool with continuous recording)
-  is scoped for Phase 1 — see `HUMAN-HANDOFF-DESIGN.md`.
+- The human line is a **separate Twilio number** (not the Vapi AI line):
+  an inbound call rings Alex's phone, and if he picks up the call is
+  recorded (dual channel), transcribed and turned into a work order with
+  `call_type='human'`.
+- Every human call gets AI meeting minutes: key facts (name, address,
+  issue, trade, timing, urgency, budget), action items the operator can
+  tick off, follow-up priority and a recommended next step. Stored in
+  `work_orders.human_minutes` and rendered at `/human-calls` (and on the
+  work-order detail page).
+- `/human-handoff-demo` used to show this pipeline on hard-coded sample
+  transcripts. It is now a redirect to `/human-calls` — the sample data is
+  gone, the capability runs on real calls.
+- **Blocking**: the Twilio account has no number yet (trial expired), so
+  no real human call can arrive until a number is bought and wired up
+  (`scripts/activate-human-line.js`).
 
 ### 4.4 Dashboard
 
@@ -255,7 +265,7 @@ Each work order also carries:
 - ✅ Country-aware validation (US zip prefix, MY postcode range)
 - ✅ Twilio emergency escalation with retry
 - ✅ Dashboard with order detail, customer preview, boss config
-- ✅ Human Handoff + Recording demo at `/human-handoff-demo`
+- ✅ Human line (Twilio) + recording → work order, at `/human-calls` (pending a phone number)
 - ✅ Multi-region import script (`import-vapi-calls.js` / `-webcalls.js`)
 - ✅ 34-check static config validator
 - ✅ 32-case user test plan

@@ -1,5 +1,9 @@
 // Core TypeScript types for the demo
 
+import type { MeetingMinutes } from "@/lib/meeting-minutes";
+
+export type { MeetingMinutes };
+
 // Issue types across all regions:
 //   US (home services): plumbing | electrical | hvac | handyman | roofing | general
 //   MY H-Master (security): security | alarm | cctv | autogate | access_control | door_lock | general
@@ -125,6 +129,13 @@ export interface WorkOrder {
   quote_high: number | null;
   pricing_breakdown?: PricingBreakdown | null;
   summary: string | null;
+  // Triage summary fields written by the LLM summary pipeline.
+  intent_summary?: string | null;
+  customer_tendency?: string | null;
+  mentioned_topics?: string[] | null;
+  follow_up_priority?: "high" | "medium" | "low" | "none" | null;
+  follow_up_notes?: string | null;
+  follow_up_recommended?: boolean | null;
   vapi_call_id: string | null;
   recording_url: string | null;
   transcript: TranscriptEntry[] | null;
@@ -148,6 +159,12 @@ export interface WorkOrder {
   human_ring_seconds?: number | null;
   /** Human-facing label for the line, e.g. "Handy Works direct line". */
   line_label?: string | null;
+  // Structured AI meeting minutes for human-answered calls (migration 018):
+  // the notes a person would have taken — key facts, action items, the
+  // recommended next step. Null on AI calls.
+  human_minutes?: MeetingMinutes | null;
+  /** How human_minutes was produced: "llm" | "none" | null (never attempted). */
+  human_minutes_source?: "llm" | "none" | null;
   created_at: string;
   updated_at: string;
 }

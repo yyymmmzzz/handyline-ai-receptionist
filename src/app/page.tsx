@@ -121,6 +121,7 @@ function DashboardPageInner() {
     urgent: orders.filter((o) => o.ai_decision === "urgent" || o.status === "urgent").length,
     pending: orders.filter((o) => o.status === "pending").length,
     callback: orders.filter((o) => o.status === "callback" || o.ai_decision === "unsure").length,
+    human: orders.filter((o) => o.call_type === "human").length,
   };
 
   // Call-type counts for the filter chips
@@ -147,8 +148,16 @@ function DashboardPageInner() {
             Live feed of calls handled by the AI receptionist
           </p>
         </div>
-        <div className="text-xs text-gray-400">
-          {orders.length > 0 && `${orders.length} total`}
+        <div className="flex items-center gap-3">
+          <Link
+            href="/human-calls"
+            className="px-3 py-1.5 text-sm rounded-md border border-purple-200 bg-purple-50 text-purple-700 font-medium hover:bg-purple-100"
+          >
+            👤 真人通话{stats.human ? ` (${stats.human})` : ""}
+          </Link>
+          <div className="text-xs text-gray-400">
+            {orders.length > 0 && `${orders.length} total`}
+          </div>
         </div>
       </div>
 

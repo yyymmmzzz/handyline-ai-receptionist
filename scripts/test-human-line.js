@@ -9,8 +9,10 @@
  *   2. /api/human-line/voice returns TwiML that dials Alex's phone
  *   3. /api/human-line/no-answer returns the configured fallback
  *   4. /api/human-line/recording turns a finished recording into a work
- *      order with call_type='human', a stored recording, a transcript and a
- *      summary
+ *      order with call_type='human', a stored recording, a transcript, a
+ *      summary AND the AI meeting minutes (key facts + action items)
+ *   5. /api/human-line/status tells the operator whether the line can take
+ *      a call right now
  *
  * Step 4 needs a number that maps to the customer, so the script sets
  * bosses.human_line_number to a placeholder for the duration of the test and
@@ -199,7 +201,8 @@ async function main() {
           pass("生成了工单", body.workOrderId);
           createdOrderIds.push(body.workOrderId);
           const row = await mgmtQuery(
-            `select call_type, ai_decision, recording_url, transcript, summary, summary_source, line_label, status
+            `select call_type, ai_decision, recording_url, transcript, summary, summary_source, line_label, status,
+                    human_minutes, human_minutes_source
              from work_orders where id = '${body.workOrderId}';`,
           );
           const o = row[0] || {};
@@ -209,6 +212,28 @@ async function main() {
           tlen > 0 ? pass("转写已生成", `${tlen} 行`) : fail("转写已生成", "空");
           o.summary ? pass("摘要已生成", String(o.summary).slice(0, 70)) : fail("摘要已生成", "空");
           o.line_label ? pass("线路标签", o.line_label) : fail("线路标签", "空");
+
+          // AI meeting minutes — the thing the demo used to fake.
+          if (o.human_minutes) {
+            pass("AI 纪要已生成", o.human_minutes_source === "llm" ? "来源 llm" : `来源 ${o.human_minutes_source}`);
+            o.human_minutes.summary
+              ? pass("纪要有摘要", String(o.human_minutes.summary).slice(0, 70))
+              : fail("纪要有摘要", "空");
+            o.human_minutes.key_facts && typeof o.human_minutes.key_facts === "object"
+              ? pass("纪要有 key_facts")
+              : fail("纪要有 key_facts", JSON.stringify(o.human_minutes.key_facts));
+            Array.isArray(o.human_minutes.action_items)
+              ? pass("纪要有 action_items 数组", `${o.human_minutes.action_items.length} 条`)
+              : fail("纪要有 action_items 数组", "不是数组");
+            ["high", "medium", "low"].includes(o.human_minutes.follow_up_priority)
+              ? pass("跟进优先级合法", o.human_minutes.follow_up_priority)
+              : fail("跟进优先级合法", String(o.human_minutes.follow_up_priority));
+          } else {
+            fail(
+              "AI 纪要已生成",
+              `human_minutes 为空（source=${o.human_minutes_source}，接口返回 minutesSource=${body.minutesSource}${body.minutesError ? ` / ${body.minutesError}` : ""}）`,
+            );
+          }
         } else {
           fail("生成了工单", rec.body.slice(0, 200));
         }
@@ -216,6 +241,30 @@ async function main() {
         fail("recording 回调", `HTTP ${rec.status} ${rec.body.slice(0, 200)}`);
       }
     }
+    // --- 5. status: can the line take a call right now?
+    console.log("\n[5] /api/human-line/status");
+    const statusOut = execFileSync(
+      "curl",
+      ["-sS", "--http1.1", "--max-time", "60", "-w", "\n%{http_code}", `${BASE_URL}/api/human-line/status`],
+      { encoding: "utf8" },
+    );
+    const cut = statusOut.lastIndexOf("\n");
+    const statusCode = Number(statusOut.slice(cut + 1).trim());
+    let statusBody = {};
+    try { statusBody = JSON.parse(statusOut.slice(0, cut)); } catch { /* ignore */ }
+    statusCode === 200
+      ? pass("返回 200")
+      : fail("返回 200", `HTTP ${statusCode}`);
+    statusBody.ok ? pass("ok = true") : fail("ok = true", JSON.stringify(statusBody).slice(0, 160));
+    Array.isArray(statusBody.lines) && statusBody.lines.length > 0
+      ? pass("列出了客户线路", statusBody.lines.map((l) => l.companyName).join(", "))
+      : fail("列出了客户线路", "没有 lines");
+    typeof statusBody.anyLive === "boolean"
+      ? pass("给出是否已开通", `anyLive=${statusBody.anyLive}｜${statusBody.headline || ""}`)
+      : fail("给出是否已开通", "缺少 anyLive");
+    statusBody.counts && typeof statusBody.counts.humanCalls === "number"
+      ? pass("统计了真人通话数", String(statusBody.counts.humanCalls))
+      : fail("统计了真人通话数", "缺少 counts");
   } finally {
     // --- cleanup ---------------------------------------------------
     for (const id of createdOrderIds) {

@@ -24,6 +24,7 @@
 > | 新建 `human_calls` 表 | 不新建表 —— 复用 `work_orders`，用 `call_type='human'` 区分 |
 > | 转写用 Vapi 的 transcript | 转写用 `src/lib/transcribe.ts`（OpenAI Whisper） |
 > | 未考虑回调接口鉴权 | 6 个 Twilio 回调现在全部校验 `X-Twilio-Signature` |
+> | 会议纪要只跑在 demo 页（假数据） | 纪要接进真人线生产路径，每通真实来电都生成，存 `work_orders.human_minutes`，页面 `/human-calls` |
 >
 > **当前唯一阻塞：Twilio 账号名下 0 个号码**（Trial 且已过期）。买号后：
 > ```bash
