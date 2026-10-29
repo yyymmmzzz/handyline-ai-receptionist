@@ -195,7 +195,9 @@ async function persistRecording(url, callId, expiresAt) {
     const orders = await mgmtQuery(
       `select id, ai_decision, summary, issue_type, quote_low, quote_high,
               customer_zipcode, recording_url, status, transcript,
-              customer_name, customer_name_extracted
+              customer_name, customer_name_extracted, intent_summary,
+              customer_tendency, mentioned_topics, follow_up_priority,
+              follow_up_notes, follow_up_recommended
        from work_orders where vapi_call_id = '${callId}' limit 1;`,
     );
     if (!orders.length) {
@@ -263,6 +265,9 @@ async function persistRecording(url, callId, expiresAt) {
     };
 
     const diffs = [];
+    if (callSummary.customerNameExtracted && !before.customer_name_extracted) {
+      diffs.push(`customer_name_extracted: null → ${JSON.stringify(callSummary.customerNameExtracted)} (${summarySource})`);
+    }
     for (const k of ["ai_decision", "summary", "issue_type", "quote_low", "quote_high", "customer_zipcode"]) {
       const b = before[k] ?? null;
       const a = patch[k] ?? null;
@@ -275,9 +280,26 @@ async function persistRecording(url, callId, expiresAt) {
       const hadBot = before.transcript?.some?.((t) => t.role === "assistant");
       if (!hadBot) diffs.push(`transcript: +${transcript.filter((t) => t.role === "assistant").length} AI turns`);
     }
-    if (callSummary.customerNameExtracted && !before.customer_name_extracted) {
-      diffs.push(`customer_name_extracted: null → ${JSON.stringify(callSummary.customerNameExtracted)} (${summarySource})`);
+    // Never downgrade an existing value. The summariser falls back to regex
+    // when the LLM is unreachable, and the regex path can return null where a
+    // previous LLM run produced a real customer name.
+    const LLM_FIELDS = [
+      "customer_name_extracted",
+      "intent_summary",
+      "customer_tendency",
+      "mentioned_topics",
+      "follow_up_priority",
+      "follow_up_notes",
+      "follow_up_recommended",
+    ];
+    for (const k of LLM_FIELDS) {
+      const next = patch[k];
+      const prev = before[k];
+      if (next === null || next === undefined) {
+        if (prev !== null && prev !== undefined) patch[k] = prev;
+      }
     }
+    if (before.recording_url && !recording_url) patch.recording_url = before.recording_url;
 
     if (!diffs.length) {
       console.log(`· ${callId} — already correct`);

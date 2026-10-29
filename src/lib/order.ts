@@ -7,7 +7,7 @@ import { getServiceClient } from "./supabase";
 import { notifyBossOfNewOrder } from "./notify";
 import { summarizeCall } from "./call-summary";
 import { summarizeWithFallback, computeSummaryHash } from "./openai-summarize";
-import { persistRecording } from "./recording-storage";
+import { persistRecording, isPermanentRecording } from "./recording-storage";
 import type { IssueType } from "./types";
 
 type DataSource = "production" | "test" | "demo";
@@ -194,11 +194,15 @@ export async function createOrUpdateWorkOrder(
   }
 
   // Check if a work order already exists for this call
-  const { data: existing } = await supabase
+  const { data: existingRow } = await supabase
     .from("work_orders")
-    .select("id")
+    .select(
+      "id, recording_url, customer_name_extracted, intent_summary, customer_tendency, " +
+        "mentioned_topics, follow_up_priority, follow_up_notes, follow_up_recommended",
+    )
     .eq("vapi_call_id", callId)
     .single();
+  const existing = (existingRow ?? null) as Record<string, unknown> | null;
 
   // Map decision to status
   const status = mapDecisionToStatus(decision);
@@ -325,6 +329,38 @@ export async function createOrUpdateWorkOrder(
     rejected_topics: orderData.rejected_topics,
     transcript_coherence: orderData.transcript_coherence,
   };
+
+  /**
+   * Never replace a good value with a worse one on re-processing.
+   *
+   * Two cases bit us:
+   *   1. `recording_url` — when the Vapi presigned URL has expired the
+   *      download fails and persistRecording falls back to the ephemeral URL.
+   *      Writing that over a permanent Supabase Storage link would kill a
+   *      recording we already have.
+   *   2. the LLM-derived fields — when the summariser falls back to regex it
+   *      can produce nulls where the previous LLM run produced a real name.
+   */
+  if (existing) {
+    const prior = existing as unknown as Record<string, unknown>;
+    const priorRecording = prior.recording_url as string | null;
+    if (
+      priorRecording &&
+      isPermanentRecording(priorRecording) &&
+      (!orderData.recording_url || !isPermanentRecording(orderData.recording_url))
+    ) {
+      orderData.recording_url = priorRecording;
+    }
+    for (const key of Object.keys(newFields005)) {
+      const next = (newFields005 as Record<string, unknown>)[key];
+      const prev = (existing as unknown as Record<string, unknown>)[key];
+      if (next === null || next === undefined) {
+        if (prev !== null && prev !== undefined) {
+          (newFields005 as Record<string, unknown>)[key] = prev;
+        }
+      }
+    }
+  }
 
   async function tryWrite(payload: Record<string, unknown>): Promise<WorkOrder> {
     if (existing) {
