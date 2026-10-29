@@ -128,11 +128,16 @@ export async function findCachedSummary(
     const supabase = getServiceClient();
     const { data, error } = await supabase
       .from("work_orders")
-      .select("customer_name_extracted, intent_summary, customer_tendency, mentioned_topics, follow_up_priority, follow_up_notes, follow_up_recommended, accepted_topics, rejected_topics, transcript_coherence")
+      .select("customer_name_extracted, intent_summary, customer_tendency, mentioned_topics, follow_up_priority, follow_up_notes, follow_up_recommended, accepted_topics, rejected_topics, transcript_coherence, summary_source")
       .eq("summary_hash", hash)
       .limit(1)
       .maybeSingle();
     if (error || !data) return null;
+    // ONLY a row produced by a successful LLM run may be reused. Rows written
+    // by the regex fallback (summary_source != 'llm') can be empty, and
+    // caching one of those locks the gap in permanently — the LLM never gets
+    // another chance at that call.
+    if (data.summary_source !== "llm") return null;
     // If the cached record has all the key fields populated, reuse it
     if (!data.intent_summary && !data.customer_name_extracted) return null;
     return {
@@ -277,7 +282,7 @@ export async function summarizeWithFallback(
   acceptedTopics: string[] = [],
   rejectedTopics: string[] = [],
   extraContext?: { durationSeconds?: number; callId?: string; source?: string },
-): Promise<{ summary: CallSummary; source: "llm" | "regex" | "cache" }> {
+): Promise<{ summary: CallSummary; source: "llm" | "regex" | "regex-fallback" | "cache" }> {
   // Default source: webhook if callId present, else manual
   const source = extraContext?.source ?? (extraContext?.callId ? "webhook" : "manual");
   if (process.env.OPENAI_API_KEY) {
@@ -295,6 +300,19 @@ export async function summarizeWithFallback(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[openai-summarize] LLM failed, falling back to regex: ${msg.slice(0, 100)}`);
+      // "regex-fallback" is NOT the same as "regex": it means the LLM was
+      // reachable in principle but failed. Callers must not treat it as a
+      // finished summary — otherwise a transient outage permanently degrades
+      // the call (the fallback output gets cached and never re-derived).
+      const out = summarizeCall(
+        transcript,
+        callerIdName,
+        issueType,
+        decision,
+        acceptedTopics,
+        rejectedTopics,
+      );
+      return { summary: out, source: "regex-fallback" };
     }
   }
   return {

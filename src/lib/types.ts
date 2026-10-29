@@ -107,6 +107,10 @@ export interface WorkOrder {
   // The name the AI heard in the call, extracted from the transcript. The
   // customer_name above is the caller ID, which is empty for most calls.
   customer_name_extracted?: string | null;
+  // Which path produced the LLM summary fields. Only "llm" rows may be
+  // reused as a cache hit — a regex fallback can be empty, and caching one
+  // of those locks the gap in permanently.
+  summary_source?: "llm" | "regex" | "regex-fallback" | null;
   customer_phone: string;
   customer_address: string | null;
   customer_zipcode: string | null;

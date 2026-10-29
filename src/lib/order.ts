@@ -270,6 +270,10 @@ export async function createOrUpdateWorkOrder(
     follow_up_recommended: callSummary.followUpRecommended,
     transcript_coherence: callSummary.transcriptCoherence,
     summary_hash: summaryHash,
+    // Records which path produced the LLM fields. Only "llm" may be reused as
+    // a cache hit — a regex fallback can be empty, and caching one of those
+    // would lock the gap in permanently.
+    summary_source: summarySource === "llm" ? "llm" : summarySource,
     // Priority: the AI's own end_call summary → Vapi's free-form summary →
     // the LLM intent summary. Vapi sends `summary: ""` when no analysis plan
     // is configured, so an empty string must not win over the LLM text.
