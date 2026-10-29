@@ -542,7 +542,12 @@ function TendencyBadge({ tendency }: { tendency: string }) {
     uncertain: { label: "Uncertain", emoji: "❔", classes: "bg-gray-100 text-gray-800 border-gray-200" },
     info_general: { label: "General info", emoji: "💬", classes: "bg-gray-100 text-gray-800 border-gray-200" },
   };
-  const m = map[tendency] || map.uncertain;
+  // The human line writes free-text tendencies ("urgent and ready to book").
+  // Falling back to "Uncertain" for those would state the opposite of what
+  // the model said — show the raw words instead of mislabelling them.
+  const m =
+    map[tendency] ??
+    { label: tendency, emoji: "🏷️", classes: "bg-slate-100 text-slate-800 border-slate-200" };
   return (
     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-medium rounded-full border ${m.classes}`}>
       <span>{m.emoji}</span>
