@@ -90,7 +90,15 @@ function getOpenAIClient(): OpenAI | null {
   if (_openaiClient) return _openaiClient;
   if (!process.env.OPENAI_API_KEY) return null;
   try {
-    _openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    _openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      // The default client timeout is short enough that a slow response
+      // silently dropped us into the regex fallback, which is why some calls
+      // had a shallow intent summary. These transcripts are small, so 60s is
+      // generous — and we retry twice before giving up.
+      timeout: 60_000,
+      maxRetries: 2,
+    });
     return _openaiClient;
   } catch {
     return null;

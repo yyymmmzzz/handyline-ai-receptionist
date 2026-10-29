@@ -104,6 +104,9 @@ export interface WorkOrder {
   boss_id: string;
   customer_id: string | null;
   customer_name: string | null;
+  // The name the AI heard in the call, extracted from the transcript. The
+  // customer_name above is the caller ID, which is empty for most calls.
+  customer_name_extracted?: string | null;
   customer_phone: string;
   customer_address: string | null;
   customer_zipcode: string | null;

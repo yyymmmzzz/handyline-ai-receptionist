@@ -50,6 +50,9 @@ function buildExtraction() {
     [
       "tsc",
       path.join(ROOT, "src/lib/call-extraction.ts"),
+      path.join(ROOT, "src/lib/openai-summarize.ts"),
+      path.join(ROOT, "src/lib/call-summary.ts"),
+      path.join(ROOT, "src/lib/supabase.ts"),
       path.join(ROOT, "src/lib/types.ts"),
       "--outDir",
       outDir,
@@ -64,7 +67,16 @@ function buildExtraction() {
     ],
     { cwd: ROOT, stdio: "pipe" },
   );
-  return require(path.join(outDir, "call-extraction.js"));
+  // The compiled files live in a temp dir, so Node cannot walk up to the
+  // project's node_modules. Point the resolver at it explicitly.
+  process.env.NODE_PATH = [path.join(ROOT, "node_modules"), process.env.NODE_PATH]
+    .filter(Boolean)
+    .join(path.delimiter);
+  require("module").Module._initPaths();
+  return {
+    ...require(path.join(outDir, "call-extraction.js")),
+    ...require(path.join(outDir, "openai-summarize.js")),
+  };
 }
 
 async function mgmtQuery(sql) {
@@ -95,15 +107,29 @@ async function restPatch(table, filter, body) {
 /**
  * Try to copy a recording into permanent storage. The Vapi presigned URL
  * expires ~30 min after the call, so older calls simply cannot be recovered.
+ *
+ * The expiry timestamp comes from the payload itself
+ * (artifact.presignedUrlsExpiresAt) — checking it first avoids hanging on a
+ * download that is guaranteed to fail.
  */
-async function persistRecording(url, callId) {
+async function persistRecording(url, callId, expiresAt) {
   if (!url) return null;
+
+  if (expiresAt) {
+    const exp = new Date(expiresAt).getTime();
+    if (!Number.isNaN(exp) && exp <= Date.now()) {
+      console.log(`     (recording URL expired at ${expiresAt} — not recoverable)`);
+      return null;
+    }
+  }
+
   const storagePath = `call-recordings/${callId}.wav`;
   const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/call-recordings/${callId}.wav`;
 
   const head = await fetch(`${SUPABASE_URL}/storage/v1/object/public/call-recordings/${callId}.wav`, {
     method: "HEAD",
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    signal: AbortSignal.timeout(15_000),
   });
   if (head.ok) return publicUrl;
 
@@ -130,12 +156,23 @@ async function persistRecording(url, callId) {
       "x-upsert": "true",
     },
     body: buf,
+    signal: AbortSignal.timeout(30_000),
   });
   return up.ok ? publicUrl : null;
 }
 
 (async () => {
-  const { extractCallData, buildTranscript } = buildExtraction();
+  const { extractCallData, buildTranscript, summarizeWithFallback, computeSummaryHash } =
+    buildExtraction();
+
+  // The compiled modules read their config from process.env.
+  for (const k of [
+    "OPENAI_API_KEY",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+  ]) {
+    if (get(k)) process.env[k] = get(k);
+  }
 
   const bosses = await mgmtQuery(`select * from bosses limit 1;`);
   const boss = bosses[0];
@@ -157,7 +194,8 @@ async function persistRecording(url, callId) {
 
     const orders = await mgmtQuery(
       `select id, ai_decision, summary, issue_type, quote_low, quote_high,
-              customer_zipcode, recording_url, status, transcript
+              customer_zipcode, recording_url, status, transcript,
+              customer_name, customer_name_extracted
        from work_orders where vapi_call_id = '${callId}' limit 1;`,
     );
     if (!orders.length) {
@@ -177,7 +215,24 @@ async function persistRecording(url, callId) {
       message.recordingUrl ||
       message.artifact?.recordingUrl ||
       null;
-    const recording_url = await persistRecording(recUrl, callId);
+    const recording_url = await persistRecording(
+      recUrl,
+      callId,
+      message.artifact?.presignedUrlsExpiresAt,
+    );
+
+    // Re-run the LLM summariser over the CORRECTED two-sided transcript.
+    // The original run summarised a one-sided transcript, so the customer
+    // name and intent fields were derived from half the conversation.
+    const { summary: callSummary, source: summarySource } = await summarizeWithFallback(
+      transcript,
+      before.customer_name ?? null,
+      x.issueType,
+      x.decision,
+      x.acceptedTopics,
+      x.rejectedTopics,
+      { callId, source: "backfill" },
+    );
 
     const patch = {
       ai_decision: x.decision,
@@ -193,6 +248,16 @@ async function persistRecording(url, callId) {
       accepted_topics: x.acceptedTopics,
       rejected_topics: x.rejectedTopics,
       transcript,
+      // LLM-derived fields
+      customer_name_extracted: callSummary.customerNameExtracted,
+      intent_summary: callSummary.intentSummary,
+      customer_tendency: callSummary.customerTendency,
+      mentioned_topics: callSummary.mentionedTopics,
+      follow_up_priority: callSummary.followUpPriority,
+      follow_up_notes: callSummary.followUpNotes,
+      follow_up_recommended: callSummary.followUpRecommended,
+      transcript_coherence: callSummary.transcriptCoherence,
+      summary_hash: computeSummaryHash(transcript, x.decision, x.issueType),
       ...(recording_url ? { recording_url } : {}),
       updated_at: new Date().toISOString(),
     };
@@ -209,6 +274,9 @@ async function persistRecording(url, callId) {
     if (transcript.length) {
       const hadBot = before.transcript?.some?.((t) => t.role === "assistant");
       if (!hadBot) diffs.push(`transcript: +${transcript.filter((t) => t.role === "assistant").length} AI turns`);
+    }
+    if (callSummary.customerNameExtracted && !before.customer_name_extracted) {
+      diffs.push(`customer_name_extracted: null → ${JSON.stringify(callSummary.customerNameExtracted)} (${summarySource})`);
     }
 
     if (!diffs.length) {
