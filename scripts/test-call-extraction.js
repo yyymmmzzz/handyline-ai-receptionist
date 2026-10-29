@@ -81,7 +81,7 @@ function check(name, cond, detail = "") {
 
 (async () => {
   console.log("→ compiling src/lib/call-extraction.ts …");
-  const { extractCallData, buildTranscript } = buildExtraction();
+  const { extractCallData, buildTranscript, detectAIQualityIssues } = buildExtraction();
 
   const bosses = await mgmtQuery(`select * from bosses limit 1;`);
   const boss = bosses[0];
@@ -207,6 +207,46 @@ function check(name, cond, detail = "") {
     for (const f of failures) console.log(`   - ${f}`);
     process.exit(1);
   }
+  // --- AI misbehaviour detection ------------------------------------------
+  // The 2026-10-14 opener echo must be caught mechanically, so a call that
+  // went wrong is visible without reading the transcript.
+  const openerLoop = detectAIQualityIssues([
+    { role: "assistant", text: "Handy Works service desk. What's the issue?" },
+    { role: "user", text: "Hi. Um, do you guys install TV now?" },
+    { role: "assistant", text: "What's the issue?" },
+    { role: "user", text: "Do you install TV now?" },
+    { role: "assistant", text: "What's the issue?" },
+  ]);
+  check(
+    "detects the opener echo",
+    openerLoop.includes("repeated_turn") && openerLoop.includes("opener_echo"),
+    `flags: ${openerLoop.join(",") || "none"}`,
+  );
+
+  const healthy = detectAIQualityIssues([
+    { role: "assistant", text: "Handy Works service desk. What's the issue?" },
+    { role: "user", text: "My roof is leaking, I'm in 77047" },
+    { role: "assistant", text: "Roofing work runs four hundred to two thousand five hundred. What's your ZIP code?" },
+    { role: "user", text: "77047, tomorrow morning, Mike, 713-555-0100" },
+    { role: "assistant", text: "Got it, Mike. I will certainly call to follow up. Anything else?" },
+  ]);
+  check(
+    "a normal call is not flagged",
+    healthy.length === 0,
+    `flags: ${healthy.join(",") || "none"}`,
+  );
+
+  const deadLine = detectAIQualityIssues([
+    { role: "assistant", text: "Handy Works service desk. What's the issue?" },
+    { role: "assistant", text: "Are you there?" },
+    { role: "assistant", text: "Hello?" },
+  ]);
+  check(
+    "detects a dead line (customer never spoke)",
+    deadLine.includes("no_customer_turn"),
+    `flags: ${deadLine.join(",") || "none"}`,
+  );
+
   console.log("All extraction assertions passed.");
 })().catch((e) => {
   console.error("FATAL", e);

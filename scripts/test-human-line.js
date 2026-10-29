@@ -221,6 +221,8 @@ async function main() {
     for (const id of createdOrderIds) {
       await mgmtQuery(`delete from work_orders where id = '${id}';`);
     }
+    // The no-answer path records a "nobody answered" callback of its own.
+    await mgmtQuery(`delete from work_orders where vapi_call_id like 'twilio-%CA_TEST%';`);
     await mgmtQuery(
       `update bosses set human_line_number = ${original.human_line_number ? `'${original.human_line_number}'` : "null"},
        human_line_enabled = ${original.human_line_enabled},

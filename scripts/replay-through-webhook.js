@@ -61,7 +61,8 @@ async function mgmtQuery(sql) {
   let failed = 0;
   for (const row of rows) {
     const callId = row.vapi_call_id;
-    if (onlyIds && !onlyIds.has(callId)) continue;
+    // Prefix match, so a partial id is enough to select a call.
+    if (onlyIds && ![...onlyIds].some((id) => callId.startsWith(id))) continue;
 
     const before = await mgmtQuery(
       `select id, ai_decision, summary, issue_type, customer_name_extracted, recording_url
