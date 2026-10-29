@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HandyLine AI — Project Introduction</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm 16mm 14mm; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", sans-serif;
+    color: #1a202c;
+    font-size: 9.6pt;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  /* ---------- cover ---------- */
+  .cover { height: 245mm; display: flex; flex-direction: column; justify-content: space-between; page-break-after: always; }
+  .cover-rule { height: 5px; background: #d4621a; margin-bottom: 10mm; }
+  .eyebrow { font-size: 8pt; letter-spacing: 2.5px; color: #d4621a; font-weight: 700; text-transform: uppercase; }
+  h1.cover-title { font-size: 32pt; line-height: 1.1; margin: 4mm 0 3mm 0; color: #111827; letter-spacing: -0.5px; }
+  .cover-sub { font-size: 13pt; color: #4b5563; margin-bottom: auto; }
+  .cover-meta { border-top: 1px solid #d1d5db; padding-top: 5mm; font-size: 9pt; color: #6b7280; }
+  .cover-meta div { margin-bottom: 1.5mm; }
+  .cover-meta b { color: #111827; }
+
+  /* ---------- toc ---------- */
+  .toc { page-break-after: always; }
+  .toc h2 { font-size: 15pt; margin: 0 0 4mm 0; padding-bottom: 2mm; border-bottom: 2px solid #d4621a; }
+  .toc ol { list-style: none; padding: 0; margin: 0; counter-reset: t; }
+  .toc li { counter-increment: t; margin-bottom: 2.5mm; }
+  .toc li a { text-decoration: none; color: #1a202c; font-weight: 500; display: flex; gap: 3mm; align-items: baseline; }
+  .toc li a::before { content: counter(t) "."; color: #d4621a; font-weight: 700; min-width: 6mm; }
+  .toc li a span { flex: 1; padding-bottom: 1mm; border-bottom: 1px dotted #d1d5db; }
+  .toc li a .pg { color: #9ca3af; font-size: 8.5pt; }
+
+  /* ---------- sections ---------- */
+  section { page-break-before: always; }
+  section.first { page-break-before: auto; }
+
+  h2.sec { font-size: 16pt; margin: 0 0 1.5mm 0; padding-bottom: 2mm; border-bottom: 2.5px solid #d4621a; color: #111827; }
+  h2.sec .num { color: #d4621a; }
+  .sec-lede { font-size: 9.6pt; color: #4b5563; margin: 0 0 5mm 0; }
+
+  h3 { font-size: 11pt; margin: 6mm 0 2.5mm 0; color: #111827; }
+
+  /* ---------- flow diagram ---------- */
+  .flow { margin: 4mm 0 5mm 0; }
+  .lane { margin-bottom: 4mm; }
+  .lane-title {
+    font-size: 8pt; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+    color: #fff; display: inline-block; padding: 1.2mm 3mm; border-radius: 2px; margin-bottom: 2.5mm;
+  }
+  .lane-ai   .lane-title { background: #2563eb; }
+  .lane-human .lane-title { background: #7c3aed; }
+  .lane-old   .lane-title { background: #6b7280; }
+
+  .stack { display: flex; flex-direction: column; align-items: center; }
+  .row { display: flex; gap: 4mm; align-items: stretch; justify-content: center; }
+
+  .box {
+    border: 1.5px solid #d1d5db; border-radius: 3px; background: #fff;
+    padding: 2.5mm 3mm; text-align: center; min-width: 42mm; font-size: 8.6pt;
+  }
+  .box b { display: block; font-size: 9pt; color: #111827; margin-bottom: 0.5mm; }
+  .box small { color: #6b7280; font-size: 7.6pt; display: block; }
+
+  .box.ai    { border-color: #93c5fd; background: #eff6ff; }
+  .box.human { border-color: #c4b5fd; background: #f5f3ff; }
+  .box.old   { border-color: #d1d5db; background: #f9fafb; }
+  .box.warn  { border-color: #fcd34d; background: #fffbeb; }
+  .box.bad   { border-color: #fca5a5; background: #fef2f2; }
+  .box.good  { border-color: #86efac; background: #f0fdf4; }
+  .box.neutral{ border-color: #cbd5e1; background: #f8fafc; }
+
+  .n {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 5mm; height: 5mm; border-radius: 50%; background: #111827; color: #fff;
+    font-size: 7pt; font-weight: 700; margin-right: 1.5mm; flex-shrink: 0;
+  }
+  .n.ai { background: #2563eb; }
+  .n.human { background: #7c3aed; }
+  .n.old { background: #6b7280; }
+
+  /* arrows */
+  .arrow { display: flex; justify-content: center; align-items: center; height: 7mm; color: #6b7280; }
+  .arrow span { font-size: 15pt; line-height: 1; color: #9ca3af; }
+  .arrow-label { font-size: 7.4pt; color: #6b7280; text-align: center; margin-top: -1mm; }
+
+  /* decision fan-out */
+  .fan { display: flex; gap: 3mm; }
+  .fan > div { flex: 1; }
+
+  .hbar {
+    height: 1.5px; background: #cbd5e1; margin: 1mm auto; width: 70%;
+  }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0 5mm 0; font-size: 8.8pt; }
+  th { background: #111827; color: #fff; text-align: left; padding: 2mm 2.5mm; font-weight: 600; font-size: 8.4pt; }
+  td { padding: 2mm 2.5mm; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+  tr:nth-child(even) td { background: #f9fafb; }
+  td.issue { color: #991b1b; }
+  td.fix { color: #166534; }
+  td b { color: #111827; }
+
+  /* ---------- callouts ---------- */
+  .callout {
+    border-left: 3px solid #d4621a; background: #fff7ed;
+    padding: 3mm 4mm; margin: 3mm 0; font-size: 8.8pt;
+  }
+  .callout b { color: #9a3412; }
+  .callout.teal { border-left-color: #0d9488; background: #f0fdfa; }
+  .callout.teal b { color: #115e59; }
+
+  /* ---------- steps ---------- */
+  .step { margin-bottom: 4.5mm; padding-bottom: 3.5mm; border-bottom: 1px solid #e5e7eb; page-break-inside: avoid; }
+  .step:last-child { border-bottom: none; }
+  .step-h { display: flex; align-items: baseline; gap: 2.5mm; margin-bottom: 1.5mm; }
+  .step-n {
+    flex-shrink: 0; width: 6mm; height: 6mm; border-radius: 50%; background: #111827; color: #fff;
+    font-size: 8pt; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+  }
+  .step-h b { font-size: 10pt; color: #111827; }
+  .step-b { margin-left: 8.5mm; font-size: 9pt; }
+  .step-b ul { margin: 1mm 0 0 0; padding-left: 5mm; }
+  .step-b li { margin-bottom: 0.8mm; }
+  .cmt {
+    margin-top: 1.8mm; padding: 2mm 3mm; background: #f0fdf4; border-left: 2.5px solid #22c55e;
+    font-size: 8.4pt; color: #14532d;
+  }
+  .cmt.problem { background: #fef2f2; border-left-color: #ef4444; color: #7f1d1d; }
+
+  .legend { display: flex; gap: 4mm; flex-wrap: wrap; margin: 2mm 0 4mm 0; font-size: 7.8pt; color: #6b7280; }
+  .legend span i { display: inline-block; width: 3.5mm; height: 3.5mm; border-radius: 2px; margin-right: 1.5mm; vertical-align: middle; border: 1px solid #cbd5e1; }
+
+  .footnote { font-size: 7.8pt; color: #6b7280; font-style: italic; margin-top: 3mm; }
+
+  /* prevent orphans inside flow blocks */
+  .keep { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <div>
+    <div class="cover-rule"></div>
+    <div class="eyebrow">HandyLine AI &nbsp;·&nbsp; Project Introduction</div>
+    <h1 class="cover-title">The AI Receptionist<br>for Home Services</h1>
+    <div class="cover-sub">
+      One system, two phone lines &mdash; AI answers and triages,<br>
+      a human picks up when it matters. Both land in the same dashboard.
+    </div>
+  </div>
+  <div class="cover-meta">
+    <div><b>Product</b> &nbsp;HandyLine AI &nbsp;(parent: Bookloh EMS)</div>
+    <div><b>Reference customer</b> &nbsp;Handy Works Home Services &mdash; Bellaire, Texas</div>
+    <div><b>Second market</b> &nbsp;H-Master Security &mdash; Bintulu, Malaysia</div>
+    <div><b>Document date</b> &nbsp;12 October 2026</div>
+    <div><b>Build</b> &nbsp;commit fe6fe56 &middot; Vapi + GPT-4o-mini + ElevenLabs + Twilio + Supabase</div>
+  </div>
+</div>
+
+<!-- ============ TOC ============ -->
+<div class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#s1"><span>What the product does</span><span class="pg">3</span></a></li>
+    <li><a href="#s2"><span>Workflow before HandyLine</span><span class="pg">4</span></a></li>
+    <li><a href="#s3"><span>Workflow after HandyLine</span><span class="pg">6</span></a></li>
+    <li><a href="#s4"><span>Step by step: the AI line</span><span class="pg">8</span></a></li>
+    <li><a href="#s5"><span>Step by step: the human line</span><span class="pg">10</span></a></li>
+    <li><a href="#s6"><span>What every call produces</span><span class="pg">11</span></a></li>
+    <li><a href="#s7"><span>Two regions, one system</span><span class="pg">12</span></a></li>
+    <li><a href="#s8"><span>Where it runs</span><span class="pg">13</span></a></li>
+  </ol>
+</div>
+
+<!-- ============ 1. WHAT IT DOES ============ -->
+<section id="s1" class="first">
+  <h2 class="sec"><span class="num">1.</span> What the product does</h2>
+  <p class="sec-lede">
+    A small contractor cannot answer the phone while he is under a sink. Roughly a
+    quarter of his calls go unanswered, and the ones that land in voicemail usually
+    never come back. HandyLine AI answers every call, decides whether the job is one
+    he actually does and one he actually reaches, gives an honest price range, and
+    escalates the genuine emergencies to his mobile in seconds.
+  </p>
+
+  <div class="legend">
+    <span><i style="background:#eff6ff;border-color:#93c5fd"></i>AI line</span>
+    <span><i style="background:#f5f3ff;border-color:#c4b5fd"></i>Human line</span>
+    <span><i style="background:#fffbeb;border-color:#fcd34d"></i>Decision point</span>
+    <span><i style="background:#fef2f2;border-color:#fca5a5"></i>Problem in the old flow</span>
+    <span><i style="background:#f0fdf4;border-color:#86efac"></i>Outcome</span>
+  </div>
+
+  <table>
+    <tr><th style="width:30%">Capability</th><th>What actually happens</th></tr>
+    <tr>
+      <td><b>Answers 24/7</b></td>
+      <td>Every inbound call is picked up in about two seconds, including nights, weekends and holidays.</td>
+    </tr>
+    <tr>
+      <td><b>Qualifies before quoting</b></td>
+      <td>Captures the issue and the caller's ZIP, checks it against the contractor's actual trade list and 25-mile service area, and only then gives a price.</td>
+    </tr>
+    <tr>
+      <td><b>Prices honestly</b></td>
+      <td>Reads from the contractor's own price list. No trip fee inside the service area. Every quote ends with &ldquo;final price confirmed once we see the job&rdquo;.</td>
+    </tr>
+    <tr>
+      <td><b>Escalates emergencies</b></td>
+      <td>Burst pipes, gas smells, smoke, shop HVAC failures ring the contractor's mobile immediately, retrying at 5 then 15 minutes, then text him.</td>
+    </tr>
+    <tr>
+      <td><b>Records everything</b></td>
+      <td>Audio is copied into permanent storage, transcribed, summarised into structured notes, and written to the dashboard.</td>
+    </tr>
+    <tr>
+      <td><b>Two lines, one dashboard</b></td>
+      <td>A dedicated number routes to a person; the AI number stays AI. Both write to the same work-order table, filterable by who answered.</td>
+    </tr>
+  </table>
+
+  <div class="callout">
+    <b>The core idea:</b> the AI is not trying to sound human. It is trying to
+    be <i>useful at 2am</i> &mdash; qualify the job, price it honestly, and get out
+    of the way. Anything a machine should not decide gets escalated to a person
+    within seconds.
+  </div>
+</section>
+
+<!-- ============ 2. BEFORE ============ -->
+<section id="s2">
+  <h2 class="sec"><span class="num">2.</span> Workflow before HandyLine</h2>
+  <p class="sec-lede">
+    The reference customer today. Every box below is a real step, and every red box
+    is a place where a customer is lost, a job is mis-quoted, or an emergency sits
+    unheard in a voicemail.
+  </p>
+
+  <div class="flow keep">
+    <div class="lane lane-old">
+      <div class="lane-title">Current flow &mdash; one number, one person</div>
+      <div class="stack">
+
+        <div class="row">
+          <div class="box old"><span class="n old">1</span><b>Customer dials</b><small>the published number</small></div>
+        </div>
+        <div class="arrow"><span>&#9660;</span></div>
+
+        <div class="row">
+          <div class="box bad">
+            <span class="n old">2</span><b>Nobody answers</b>
+            <small>on a job &middot; after hours &middot; weekend &middot; driving</small>
+          </div>
+          <div class="box bad">
+            <span class="n old">3</span><b>Voicemail</b>
+            <small>message left, or not</small>
+          </div>
+        </div>
+        <div class="arrow"><span>&#9660;</span></div>
+
+        <div class="row">
+          <div class="box bad">
+            <span class="n old">4</span><b>Lost in the queue</b>
+            <small>call back hours later, or never</small>
+          </div>
+        </div>
+        <div class="arrow"><span>&#9660;</span></div>
+
+        <div class="row">
+          <div class="box bad">
+            <span class="n old">5</span><b>Manual triage</b>
+            <small>&ldquo;is this my trade? in my area?&rdquo;</small>
+          </div>
+        </div>
+        <div class="arrow"><span>&#9660;</span></div>
+
+        <div class="row">
+          <div class="box bad">
+            <span class="n old">6</span><b>Quote from memory</b>
+            <small>no price list to read from</small>
+          </div>
+        </div>
+        <div class="arrow"><span>&#9660;</span></div>
+
+        <div class="row">
+          <div class="box old"><span class="n old">7</span><b>Schedule by hand</b><small>text back and forth</small></div>
+        </div>
+        <div class="arrow"><span>&#9660;</span></div>
+
+        <div class="row">
+          <div class="box bad">
+            <span class="n old">8</span><b>Nothing is written down</b>
+            <small>what was promised, to whom, at what price</small>
+          </div>
+        </div>
+
+        <div class="hbar"></div>
+        <div class="arrow-label" style="margin-bottom:3mm">
+          and the emergencies &mdash; burst pipe, gas, no heat &mdash; sit in the same queue as a quote request
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>The eight losses this creates</h3>
+  <table>
+    <tr><th style="width:34%">Issue</th><th>Consequence</th></tr>
+    <tr><td class="issue"><b>No answer on a job</b></td><td>The caller hangs up and calls the next contractor on the list.</td></tr>
+    <tr><td class="issue"><b>Voicemail is not triaged</b></td><td>A burst pipe and a paint quote sit in the same box. The pipe loses.</td></tr>
+    <tr><td class="issue"><b>No service-area check</b></td><td>Alex drives to Sugar Land, then discovers it is outside his radius.</td></tr>
+    <tr><td class="issue"><b>No price list at hand</b></td><td>Quotes drift. The same job is quoted $180 once and $520 the next week.</td></tr>
+    <tr><td class="issue"><b>Scope creep on the phone</b></td><td>A call for a faucet turns into a slab-leak conversation with no licensed plumber on hand.</td></tr>
+    <tr><td class="issue"><b>Sunday and holidays</b></td><td>Nobody is scheduled to answer. Promised response times quietly stop being true.</td></tr>
+    <tr><td class="issue"><b>No record</b></td><td>If a customer disputes what was agreed, there is nothing to check against.</td></tr>
+    <tr><td class="issue"><b>No follow-up list</b></td><td>Good leads that were &ldquo;call back Monday&rdquo; simply never get called.</td></tr>
+  </table>
+
+  <div class="callout">
+    <b>Note on scope:</b> the old flow is not bad at doing the work &mdash; it is bad at
+    <i>triaging the work</i>. Everything in the next two sections exists to do the
+    triage, not to replace the craftsman.
+  </div>
+</section>
+
+<!-- ============ 3. AFTER ============ -->
+<section id="s3">
+  <h2 class="sec"><span class="num">3.</span> Workflow after HandyLine</h2>
+  <p class="sec-lede">
+    Two entry points, one pipeline. The contractor chooses which number to put on his
+    card; the routing behind each one does the right thing either way.
+  </p>
+
+  <div class="flow keep">
+    <div class="lane lane-ai">
+      <div class="lane-title">AI line &mdash; +1 724-362-0422</div>
+      <div class="stack">
+        <div class="row">
+          <div class="box ai"><span class="n ai">1</span><b>Call answered</b><small>&ldquo;Handy Works service desk&rdquo;</small></div>
+        </div>
+        <div class="arrow"><span>&#9660;</span></div>
+
+        <div class="row">
+          <div class="box ai"><span class="n ai">2</span><b>Issue + ZIP captured</b><small>&ldquo;kitchen faucet, I'm in 77401&rdquo;</small></div>
+        </div>
+        <div class="arrow"><span>&#9660;</span></div>
+
+        <div class="row">
+          <div class="box warn"><b>Three checks, one call</b><small>trade in scope &middot; inside the 25-mile area &middot; price range</small></div>
+        </div>
+        <div class="arrow"><span>&#9660;</span></div>
+
+        <div class="fan">
+          <div>
+            <div class="box good"><b>In scope</b><small>quote given, visit offered</small></div>
+            <div class="arrow"><span>&#9660;</span></div>
+            <div class="box neutral"><b>Booked</b><small>status = pending</small></div>
+          </div>
+          <div>
+            <div class="box warn"><b>Out of scope</b><small>wrong trade or outside 25 miles</small></div>
+            <div class="arrow"><span>&#9660;</span></div>
+            <div class="box neutral"><b>Politely declined</b><small>with a referral where one exists</small></div>
+          </div>
+          <div>
+            <div class="box warn"><b>Emergency?</b><small>gas &middot; leak &middot; power &middot; no heat</small></div>
+            <div class="arrow"><span>&#9660;</span></div>
+            <div class="box good"><b>Alex's phone rings</b><small>retry 5 min, then 15 min, then text</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="lane lane-human">
+      <div class="lane-title">Human line &mdash; a second number</div>
+      <div class="stack">
+        <div class="row">
+          <div class="box human"><span class="n human">1</span><b>Call answered</b><small>Alex's handset rings for 20 seconds</small></div>
+        </div>
+        <div class="arrow"><span>&#9660;</span></div>
+
+        <div class="fan">
+          <div>
+            <div class="box good"><b>He picks up</b><small>both sides recorded</small></div>
+            <div class="arrow"><span>&#9660;</span></div>
+            <div class="box neutral"><b>Transcribed + summarised</b><small>same AI pipeline as the AI line</small></div>
+          </div>
+          <div>
+            <div class="box warn"><b>Nobody there</b><small>after 20 seconds</small></div>
+            <div class="arrow"><span>&#9660;</span></div>
+            <div class="box neutral"><b>Voicemail + flagged</b><small>shows up as a callback for Alex</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout teal">
+    <b>Both lines converge here:</b> whatever happens &mdash; AI or human &mdash; the
+    recording, transcript, structured summary and follow-up recommendation are
+    written into the <b>same work-order record</b>. The dashboard filters by who
+    answered, but there is only one place to look.
+  </div>
+
+  <h3>The shared pipeline behind both</h3>
+  <div class="flow keep">
+    <div class="stack">
+      <div class="row">
+        <div class="box neutral"><b>Audio copied to permanent storage</b><small>Vapi and Twilio links expire in 30 minutes</small></div>
+      </div>
+      <div class="arrow"><span>&#9660;</span></div>
+      <div class="row">
+        <div class="box neutral"><b>Transcribed</b><small>speech to text</small></div>
+      </div>
+      <div class="arrow"><span>&#9660;</span></div>
+      <div class="row">
+        <div class="box neutral"><b>Summarised</b><small>intent &middot; key facts &middot; action items &middot; follow-up priority</small></div>
+      </div>
+      <div class="arrow"><span>&#9660;</span></div>
+      <div class="row">
+        <div class="box good"><b>Work order created</b><small>tagged AI or Human</small></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. AI LINE STEPS ============ -->
+<section id="s4">
+  <h2 class="sec"><span class="num">4.</span> Step by step: the AI line</h2>
+  <p class="sec-lede">Each step, what it produces, and what it replaces.</p>
+
+  <div class="step">
+    <div class="step-h"><span class="step-n">1</span><b>The call is answered</b></div>
+    <div class="step-b">
+      <ul>
+        <li>Picked up in roughly two seconds, at any hour. Opening line: &ldquo;Handy Works service desk, what's the issue?&rdquo;</li>
+        <li>Texas one-party consent is satisfied by a recording notice played at the start of every call.</li>
+      </ul>
+      <div class="cmt"><b>Replaces:</b> voicemail, missed calls, and the caller giving up after two rings.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="step-n">2</span><b>Issue and location are captured</b></div>
+    <div class="step-b">
+      <ul>
+        <li>What is broken, and which ZIP code. Two facts are enough to run every downstream decision.</li>
+        <li>The system is deliberately terse &mdash; short sentences, no filler &mdash; because a receptionist who rambles loses callers.</li>
+      </ul>
+      <div class="cmt"><b>Replaces:</b> the phone tag where Alex asks questions the customer has already answered once.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="step-n">3</span><b>Trade, service area and price are checked together</b></div>
+    <div class="step-b">
+      <ul>
+        <li>Is the issue one of the contractor's 15 trade lines? Is the ZIP inside his 25-mile radius from Bellaire?</li>
+        <li>If yes, the price range is read from <b>his own price list</b>, not a generic table. Furniture assembly starts at $75, TV mounting at $90, smart locks at $80.</li>
+        <li>No trip fee inside the service area. Outside greater Houston there is a $45 flat fee, and it is not credited against the work.</li>
+      </ul>
+      <div class="cmt"><b>Replaces:</b> &ldquo;is this my trade?&rdquo; and &ldquo;am I going out of my way?&rdquo; &mdash; the two questions that used to cost Alex real drive time.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="step-n">4</span><b>Out-of-scope work is declined honestly</b></div>
+    <div class="step-b">
+      <ul>
+        <li>Pest control, appliances, pool service, tree removal, full kitchen gut, gas lines, central AC installation, panel upgrades.</li>
+        <li>Where a trusted partner exists, the caller is offered the referral rather than simply being turned away.</li>
+        <li>Certified electrical and plumbing beyond minor work is referred out, because that is how Alex actually operates.</li>
+      </ul>
+      <div class="cmt"><b>Replaces:</b> Alex walking into a slab leak he should never have taken.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="step-n">5</span><b>Emergencies short-circuit everything</b></div>
+    <div class="step-b">
+      <ul>
+        <li>Gas smell, burst pipe, whole-house power loss, smoke or sparks, business HVAC failure with stock at risk, no heat with children or elderly at home.</li>
+        <li>The AI gives the safety instruction first &mdash; windows, leave, 911 &mdash; then rings Alex's mobile.</li>
+        <li>Retries at 5 minutes, then 15. After three misses it texts him and asks the caller to leave a message.</li>
+      </ul>
+      <div class="cmt"><b>Replaces:</b> an emergency trapped in the same voicemail box as a quote request.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="step-n">6</span><b>The call is written into the dashboard</b></div>
+    <div class="step-b">
+      <ul>
+        <li>Audio stored permanently &mdash; the provider link that expires after 30 minutes is copied into the project's own storage first.</li>
+        <li>Transcript, summary, caller intent, follow-up priority and recommended next action are all written to one record.</li>
+        <li>Alex sees it within a minute of the call ending.</li>
+      </ul>
+      <div class="cmt"><b>Replaces:</b> a conversation that existed only in two people's heads.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5. HUMAN LINE STEPS ============ -->
+<section id="s5">
+  <h2 class="sec"><span class="num">5.</span> Step by step: the human line</h2>
+  <p class="sec-lede">
+    Some customers will only talk to a person. Rather than fight that, the product
+    gives them a number where a person genuinely answers &mdash; and keeps the
+    paperwork.
+  </p>
+
+  <div class="step">
+    <div class="step-h"><span class="step-n">1</span><b>A separate number is published</b></div>
+    <div class="step-b">
+      <ul>
+        <li>One number for the AI, one for a human. Nothing is shared, so neither degrades the other.</li>
+        <li>Alex's own number and Abel's are whitelisted &mdash; they ring straight through and are never turned away by the system.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="step-n">2</span><b>His handset rings</b></div>
+    <div class="step-b">
+      <ul>
+        <li>Twenty seconds, then it gives up. The recording starts only when he actually answers, so an unanswered caller never hears a compliance notice.</li>
+        <li>Both sides of the conversation are recorded on separate channels.</li>
+      </ul>
+      <div class="cmt"><b>Design note:</b> the handset number is stored separately from the line number. An early version reused one field for both and the telephony was made to ring the line back on itself &mdash; caught only by reading the generated markup.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="step-n">3</span><b>If he picks up, the machine does the typing</b></div>
+    <div class="step-b">
+      <ul>
+        <li>The call is transcribed, then summarised into the same structured notes the AI line produces: intent, key facts, action items, follow-up priority.</li>
+        <li>Alex spends the call talking to a customer instead of writing down what he promised.</li>
+      </ul>
+      <div class="cmt"><b>Replaces:</b> the sticky note that says &ldquo;Sarah, faucet, call back Mon&rdquo;.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="step-n">4</span><b>If nobody picks up</b></div>
+    <div class="step-b">
+      <ul>
+        <li>The caller gets voicemail, and the call is still recorded and summarised.</li>
+        <li>A callback work order appears in the dashboard flagged high priority, so it cannot quietly disappear.</li>
+        <li>The behaviour is configurable per customer: offer an instant quote instead, or simply apologise and end the call.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="step-n">5</span><b>Both kinds of call appear together</b></div>
+    <div class="step-b">
+      <ul>
+        <li>The dashboard carries an <b>&ldquo;Answered by&rdquo;</b> filter &mdash; all lines, AI, or human.</li>
+        <li>Human-handled calls are badged so they are distinguishable at a glance.</li>
+        <li>There is one work-order table, not two. Customer, transcript, recording, follow-up and status columns are shared, so nothing downstream has to care who picked up.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6. WHAT A CALL PRODUCES ============ -->
+<section id="s6">
+  <h2 class="sec"><span class="num">6.</span> What every call produces</h2>
+  <p class="sec-lede">One call in, one structured record out &mdash; the same shape whether a machine or a person answered.</p>
+
+  <table>
+    <tr><th style="width:30%">Field</th><th>What it holds</th></tr>
+    <tr><td><b>Who answered</b></td><td>AI, human, or a handover &mdash; drives the dashboard filter</td></tr>
+    <tr><td><b>Recording</b></td><td>Permanent audio link; the provider's temporary link is never stored</td></tr>
+    <tr><td><b>Transcript</b></td><td>Full text of the conversation</td></tr>
+    <tr><td><b>Summary + intent</b></td><td>What the call was about, in one sentence, plus what the customer actually wanted</td></tr>
+    <tr><td><b>Key facts</b></td><td>Name, phone, address, issue, trade needed, timing, urgency signals, budget signals</td></tr>
+    <tr><td><b>Action items</b></td><td>Concrete next steps, checklistable in the dashboard</td></tr>
+    <tr><td><b>Price range</b></td><td>Low and high, read from the contractor's own list, always caveated</td></tr>
+    <tr><td><b>Follow-up priority</b></td><td>High / medium / low, driven by urgency signals in the conversation</td></tr>
+    <tr><td><b>Status</b></td><td>Urgent, pending, callback, rejected &mdash; urgent calls pin to the top</td></tr>
+  </table>
+
+  <div class="callout">
+    <b>Why this matters commercially:</b> the point is not that the AI is clever.
+    It is that a lead which would have been lost in a voicemail box now arrives with
+    a price range, a transcript and a priority &mdash; before the contractor has
+    finished his current job.
+  </div>
+</section>
+
+<!-- ============ 7. MULTI-REGION ============ -->
+<section id="s7">
+  <h2 class="sec"><span class="num">7.</span> Two regions, one system</h2>
+  <p class="sec-lede">
+    The same code runs in the United States and Malaysia. What changes is the data,
+    not the architecture.
+  </p>
+
+  <div class="flow keep">
+    <div class="stack">
+      <div class="row">
+        <div class="box ai"><b>US &mdash; Handy Works</b><small>Bellaire, Texas &middot; 15 trades &middot; USD &middot; 25-mile radius</small></div>
+        <div class="box human"><b>MY &mdash; H-Master Security</b><small>Bintulu, Sarawak &middot; 6 trades &middot; MYR &middot; postcode range</small></div>
+      </div>
+      <div class="arrow"><span>&#9660;</span></div>
+      <div class="row">
+        <div class="box neutral" style="min-width:110mm">
+          <b>Same rules engine, different answers</b>
+          <small>currency, locale, timezone, service-area test and trade list all come from the customer record</small>
+        </div>
+      </div>
+      <div class="arrow"><span>&#9660;</span></div>
+      <div class="row">
+        <div class="box good" style="min-width:110mm"><b>One dashboard, one table, filter by market</b></div>
+      </div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th style="width:26%"></th><th>US &mdash; live</th><th>MY &mdash; onboarding</th></tr>
+    <tr><td><b>Currency / locale</b></td><td>USD, en-US, America/Chicago</td><td>MYR, en-MY, Asia/Kuala_Lumpur</td></tr>
+    <tr><td><b>Service area test</b></td><td>ZIP prefix</td><td>Postcode range</td></tr>
+    <tr><td><b>Voice assistant</b></td><td>Configured and live</td><td>Placeholder, prompt pending real data</td></tr>
+    <tr><td><b>Status</b></td><td>Taking real calls</td><td>Assistant provisioned, not yet promoted</td></tr>
+  </table>
+
+  <div class="callout">
+    <b>Why the architecture is built this way:</b> adding a contractor should be a
+    data-entry task, not a development task. One assistant and one number per
+    customer; everything else is a row.
+  </div>
+</section>
+
+<!-- ============ 8. WHERE IT RUNS ============ -->
+<section id="s8">
+  <h2 class="sec"><span class="num">8.</span> Where it runs</h2>
+
+  <div class="flow keep">
+    <div class="stack">
+      <div class="row">
+        <div class="box neutral" style="min-width:52mm"><b>Caller</b><small>a phone</small></div>
+      </div>
+      <div class="arrow"><span>&#9660;</span></div>
+      <div class="row">
+        <div class="box ai" style="min-width:66mm"><b>Voice layer</b><small>Vapi for AI &middot; Twilio for the human line &middot; audio recorded either way</small></div>
+      </div>
+      <div class="arrow"><span>&#9660;</span></div>
+      <div class="row">
+        <div class="box neutral" style="min-width:66mm"><b>Application</b><small>API routes for tools, webhooks, routing and summaries</small></div>
+      </div>
+      <div class="arrow"><span>&#9660;</span></div>
+      <div class="row">
+        <div class="box good" style="min-width:66mm"><b>Database + storage</b><small>work orders, customer records, price lists, permanent audio</small></div>
+      </div>
+      <div class="arrow"><span>&#9660;</span></div>
+      <div class="row">
+        <div class="box neutral" style="min-width:66mm"><b>Dashboard</b><small>the contractor's view, filtered by market and by who answered</small></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Design decisions worth knowing</h3>
+  <table>
+    <tr><th style="width:34%">Decision</th><th>Reasoning</th></tr>
+    <tr><td><b>AI, not human, on the main line</b></td><td>A machine is cheaper than a missed lead. The human line exists for customers who insist, not as the default.</td></tr>
+    <tr><td><b>Twilio records the human line</b></td><td>Only the provider actually carrying the call can guarantee recording. The human line avoids depending on unverified behaviour.</td></tr>
+    <tr><td><b>One work-order table</b></td><td>A separate table for human calls would duplicate every field and force two code paths for no benefit.</td></tr>
+    <tr><td><b>Audio copied on arrival</b></td><td>Provider links die in 30 minutes. Copying immediately is the difference between a permanent record and a broken link.</td></tr>
+    <tr><td><b>&ldquo;general&rdquo; is a real trade</b></td><td>All four AI tools fall back to it. Without it, unclassified calls fail the scope check and get wrongly declined.</td></tr>
+    <tr><td><b>Never promise a final price</b></td><td>The quote is a range plus &ldquo;confirmed once we see the job&rdquo;. This protects the contractor from a phone-quoted price he cannot honour.</td></tr>
+  </table>
+
+  <p class="footnote">
+    HandyLine AI operates under the HandyLine brand. Bookloh EMS is the parent
+    product; bookloh.com and ems.bookloh.com remain unchanged.
+  </p>
+</section>
+
+</body>
+</html>

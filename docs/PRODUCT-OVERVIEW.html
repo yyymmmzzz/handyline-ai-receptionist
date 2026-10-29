@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HandyLine AI — What It Does</title>
+<style>
+  @page { size: A4; margin: 15mm 13mm; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", sans-serif;
+    color: #1a202c; font-size: 9.5pt; line-height: 1.5; margin: 0;
+  }
+
+  /* ---- cover ---- */
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: space-between; page-break-after: always; }
+  .rule { height: 5px; background: #d4621a; margin-bottom: 9mm; }
+  .eyebrow { font-size: 8pt; letter-spacing: 2.5px; color: #d4621a; font-weight: 700; text-transform: uppercase; }
+  h1.ct { font-size: 34pt; line-height: 1.08; margin: 4mm 0 3mm; color: #111827; letter-spacing: -0.6px; }
+  .cs { font-size: 13pt; color: #4b5563; max-width: 135mm; }
+  .cmeta { border-top: 1px solid #d1d5db; padding-top: 5mm; font-size: 9pt; color: #6b7280; }
+  .cmeta b { color: #111827; }
+
+  /* ---- toc ---- */
+  .toc { page-break-after: always; }
+  .toc h2 { font-size: 14pt; margin: 0 0 4mm; padding-bottom: 2mm; border-bottom: 2px solid #d4621a; }
+  .toc ol { list-style: none; padding: 0; margin: 0; counter-reset: t; }
+  .toc li { counter-increment: t; margin-bottom: 2.5mm; }
+  .toc li a { text-decoration: none; color: #1a202c; font-weight: 500; display: flex; gap: 3mm; align-items: baseline; }
+  .toc li a::before { content: counter(t) "."; color: #d4621a; font-weight: 700; min-width: 6mm; }
+  .toc li a span { flex: 1; padding-bottom: 1mm; border-bottom: 1px dotted #d1d5db; }
+  .toc li a .pg { color: #9ca3af; font-size: 8.5pt; }
+
+  section { page-break-before: always; }
+  section.first { page-break-before: auto; }
+
+  h2.sec { font-size: 16pt; margin: 0 0 1.5mm; padding-bottom: 2mm; border-bottom: 2.5px solid #d4621a; color: #111827; }
+  h2.sec .num { color: #d4621a; }
+  .lede { font-size: 10pt; color: #4b5563; margin: 0 0 5mm; max-width: 150mm; }
+
+  /* ---- diagram primitives ---- */
+  .stack { display: flex; flex-direction: column; align-items: center; }
+  .row { display: flex; gap: 3.5mm; align-items: stretch; justify-content: center; }
+  .col { display: flex; flex-direction: column; }
+
+  .box {
+    border: 1.5px solid #d1d5db; border-radius: 3px; background: #fff;
+    padding: 2.5mm 3mm; text-align: center; min-width: 44mm; font-size: 8.6pt;
+  }
+  .box b { display: block; font-size: 9.2pt; color: #111827; margin-bottom: 0.6mm; }
+  .box small { color: #6b7280; font-size: 7.6pt; display: block; line-height: 1.35; }
+
+  .box.ai    { border-color: #93c5fd; background: #eff6ff; }
+  .box.human { border-color: #c4b5fd; background: #f5f3ff; }
+  .box.dec   { border-color: #fcd34d; background: #fffbeb; }
+  .box.out   { border-color: #86efac; background: #f0fdf4; }
+  .box.grey  { border-color: #cbd5e1; background: #f8fafc; }
+
+  .arrow { display: flex; justify-content: center; align-items: center; height: 6mm; color: #9ca3af; }
+  .arrow span { font-size: 13pt; line-height: 1; }
+  .alabel { text-align: center; font-size: 7.4pt; color: #6b7280; margin: -2mm 0 1mm; }
+
+  /* lane headers */
+  .lane-h {
+    font-size: 8pt; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+    color: #fff; display: inline-block; padding: 1.2mm 3mm; border-radius: 2px; margin-bottom: 2.5mm;
+  }
+  .lane-h.ai { background: #2563eb; }
+  .lane-h.human { background: #7c3aed; }
+  .lane-h.both { background: #111827; }
+
+  .split { display: flex; gap: 5mm; }
+  .split > div { flex: 1; }
+  /* The AI branch fans out to three outcomes, the human branch to two, so the
+     AI half needs more room or its boxes overflow the column. */
+  .split.unequal > div:first-child { flex: 1.35; }
+  .split.unequal > div:last-child  { flex: 1; }
+  /* Inside a fan-out the boxes must be allowed to shrink below the default. */
+  .fan .box { min-width: 0; width: 100%; }
+
+  /* ---- cards ---- */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 3.5mm; margin: 3mm 0; }
+  .card { border: 1.5px solid #e5e7eb; border-left: 3px solid #d4621a; border-radius: 3px; padding: 3mm 3.5mm; background: #fff; }
+  .card h4 { margin: 0 0 1.2mm; font-size: 10pt; color: #111827; }
+  .card p { margin: 0; font-size: 8.6pt; color: #4b5563; }
+  .card.ai { border-left-color: #2563eb; }
+  .card.human { border-left-color: #7c3aed; }
+
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0 4mm; font-size: 8.8pt; }
+  th { background: #111827; color: #fff; text-align: left; padding: 2mm 2.5mm; font-weight: 600; font-size: 8.4pt; }
+  td { padding: 2mm 2.5mm; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+  tr:nth-child(even) td { background: #f9fafb; }
+  td.no { color: #991b1b; }
+  td b { color: #111827; }
+
+  .callout { border-left: 3px solid #d4621a; background: #fff7ed; padding: 3mm 4mm; margin: 3mm 0; font-size: 9pt; }
+  .callout b { color: #9a3412; }
+  .keep { page-break-inside: avoid; }
+  .big { font-size: 11pt; font-weight: 700; color: #111827; text-align: center; margin: 0 0 1mm; }
+  .sm { font-size: 8pt; color: #6b7280; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <div>
+    <div class="rule"></div>
+    <div class="eyebrow">HandyLine AI &nbsp;·&nbsp; Product Overview</div>
+    <h1 class="ct">The AI Receptionist<br>for Home Services</h1>
+    <div class="cs">
+      Two phone lines. One AI that answers and qualifies. One human who gets
+      the call when it matters. Everything lands in a single dashboard.
+    </div>
+  </div>
+  <div class="cmeta">
+    <div><b>Reference customer</b> &nbsp;Handy Works Home Services &mdash; Bellaire, Texas</div>
+    <div><b>Live since</b> &nbsp;15 August 2026 &nbsp;&middot;&nbsp; <b>Document</b> &nbsp;12 October 2026</div>
+  </div>
+</div>
+
+<!-- ============ TOC ============ -->
+<div class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#s1"><span>How a call flows</span><span class="pg">3</span></a></li>
+    <li><a href="#s2"><span>Core capabilities</span><span class="pg">4</span></a></li>
+    <li><a href="#s3"><span>What it will never do</span><span class="pg">5</span></a></li>
+  </ol>
+</div>
+
+<!-- ============ 1. FLOW ============ -->
+<section id="s1" class="first">
+  <h2 class="sec"><span class="num">1.</span> How a call flows</h2>
+  <p class="lede">
+    Two numbers, two entry points, one pipeline. Everything below happens in a
+    single call.
+  </p>
+
+  <div class="flow keep">
+
+    <!-- ENTRY -->
+    <div class="stack">
+      <span class="lane-h both">Customer dials</span>
+      <div class="split" style="width:100%; max-width:168mm;">
+        <div class="col" style="align-items:center;">
+          <div class="box ai" style="min-width:56mm;"><b>AI line</b><small>+1 724-362-0422</small></div>
+        </div>
+        <div class="col" style="align-items:center;">
+          <div class="box human" style="min-width:56mm;"><b>Human line</b><small>a second number</small></div>
+        </div>
+      </div>
+      <div class="arrow"><span>&#9660;</span></div>
+    </div>
+
+    <div class="split unequal" style="width:100%; max-width:168mm;">
+
+      <!-- AI BRANCH -->
+      <div class="col" style="align-items:center;">
+        <span class="lane-h ai">AI answers</span>
+        <div class="stack" style="width:100%;">
+          <div class="box ai"><b>Issue + ZIP captured</b><small>&ldquo;kitchen faucet, I'm in 77401&rdquo;</small></div>
+          <div class="arrow"><span>&#9660;</span></div>
+          <div class="box dec"><b>Three checks, one call</b><small>trade &middot; 25-mile area &middot; price range</small></div>
+          <div class="arrow"><span>&#9660;</span></div>
+        </div>
+        <div class="stack" style="width:100%;">
+          <div class="split fan">
+            <div class="col" style="align-items:center;">
+              <div class="box dec"><b>In scope</b><small>quote + visit offered</small></div>
+              <div class="arrow"><span>&#9660;</span></div>
+              <div class="box out"><b>Booked</b></div>
+            </div>
+            <div class="col" style="align-items:center;">
+              <div class="box dec"><b>Out of scope</b><small>refer or decline</small></div>
+              <div class="arrow"><span>&#9660;</span></div>
+              <div class="box grey"><b>Declined</b></div>
+            </div>
+            <div class="col" style="align-items:center;">
+              <div class="box dec"><b>Emergency</b><small>gas &middot; leak &middot; power &middot; no heat</small></div>
+              <div class="arrow"><span>&#9660;</span></div>
+              <div class="box out"><b>Owner's phone rings</b><small>retry 5 &rarr; 15 min, then text</small></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HUMAN BRANCH -->
+      <div class="col" style="align-items:center;">
+        <span class="lane-h human">A person answers</span>
+        <div class="stack" style="width:100%;">
+          <div class="box human"><b>Owner's handset rings</b><small>20 seconds, both sides recorded</small></div>
+          <div class="arrow"><span>&#9660;</span></div>
+          <div class="split fan">
+            <div class="col" style="align-items:center;">
+              <div class="box out"><b>He picks up</b></div>
+              <div class="arrow"><span>&#9660;</span></div>
+              <div class="box grey"><b>Talks it through</b><small>no typing</small></div>
+            </div>
+            <div class="col" style="align-items:center;">
+              <div class="box dec"><b>Nobody there</b></div>
+              <div class="arrow"><span>&#9660;</span></div>
+              <div class="box grey"><b>Voicemail</b><small>flagged for callback</small></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow" style="margin-top:2mm;"><span>&#9660;</span></div>
+    <div class="alabel" style="margin-bottom:2mm">both paths converge on the same pipeline</div>
+
+    <!-- PIPELINE -->
+    <div class="stack">
+      <span class="lane-h both">Shared pipeline &mdash; runs either way</span>
+      <div class="box grey" style="min-width:64mm;"><b>Audio copied to permanent storage</b><small>provider links expire in 30 minutes</small></div>
+      <div class="arrow"><span>&#9660;</span></div>
+      <div class="box grey" style="min-width:64mm;"><b>Transcribed and summarised</b><small>intent &middot; key facts &middot; action items &middot; priority</small></div>
+      <div class="arrow"><span>&#9660;</span></div>
+      <div class="box out" style="min-width:64mm;"><b>One work order</b><small>tagged AI or Human</small></div>
+      <div class="arrow"><span>&#9660;</span></div>
+      <div class="box out" style="min-width:64mm;"><b>Dashboard</b><small>filterable by who answered</small></div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>The point:</b> nobody has to remember what was promised. By the time the
+    contractor picks up the record, there is already a transcript, a price range
+    and a priority waiting for him.
+  </div>
+</section>
+
+<!-- ============ 2. CAPABILITIES ============ -->
+<section id="s2">
+  <h2 class="sec"><span class="num">2.</span> Core capabilities</h2>
+
+  <div class="cards">
+    <div class="card ai">
+      <h4>Answers 24/7</h4>
+      <p>Every call picked up in about two seconds, including nights, weekends and holidays. No voicemail black hole.</p>
+    </div>
+    <div class="card ai">
+      <h4>Qualifies before quoting</h4>
+      <p>Checks the job against the contractor's own trade list and 25-mile service area before giving any number.</p>
+    </div>
+    <div class="card ai">
+      <h4>Prices from the real list</h4>
+      <p>Furniture from $75, TV mounting from $90, smart locks from $80. No trip fee inside the service area. Every quote carries &ldquo;confirmed once we see the job&rdquo;.</p>
+    </div>
+    <div class="card ai">
+      <h4>Escalates emergencies in seconds</h4>
+      <p>Gas, leaks, power loss and no-heat ring the contractor's mobile immediately, then retry at 5 and 15 minutes, then text him.</p>
+    </div>
+    <div class="card human">
+      <h4>A real person on request</h4>
+      <p>A second number reaches a human directly. The owner's own numbers are whitelisted and never routed through anything.</p>
+    </div>
+    <div class="card human">
+      <h4>The machine does the typing</h4>
+      <p>Human-handled calls are recorded, transcribed and summarised the same way, so the paperwork happens without the paperwork.</p>
+    </div>
+  </div>
+
+  <h2 class="sec" style="font-size:12pt; margin-top:6mm;"><span class="num"></span> Every call produces the same record</h2>
+  <table>
+    <tr><th style="width:26%">Field</th><th>Contents</th></tr>
+    <tr><td><b>Who answered</b></td><td>AI or human &mdash; drives the dashboard filter</td></tr>
+    <tr><td><b>Recording</b></td><td>Permanent audio link, never the provider's expiring one</td></tr>
+    <tr><td><b>Transcript</b></td><td>Full conversation</td></tr>
+    <tr><td><b>Intent</b></td><td>What the caller actually wanted, in one sentence</td></tr>
+    <tr><td><b>Key facts</b></td><td>Name, phone, address, issue, trade, timing, urgency, budget signals</td></tr>
+    <tr><td><b>Action items</b></td><td>Concrete next steps, checklistable</td></tr>
+    <tr><td><b>Price range</b></td><td>Low and high, always caveated</td></tr>
+    <tr><td><b>Priority + status</b></td><td>Urgent calls pin to the top of the list</td></tr>
+  </table>
+</section>
+
+<!-- ============ 3. NEVER DOES ============ -->
+<section id="s3">
+  <h2 class="sec"><span class="num">3.</span> What it will never do</h2>
+  <p class="lede">
+    A receptionist that over-promises is worse than no receptionist. These are
+    hard limits in the AI's instructions, not settings.
+  </p>
+
+  <table>
+    <tr><th style="width:46%">It will not</th><th>Instead it</th></tr>
+    <tr><td class="no">Promise a final price</td><td>gives a range and says it is confirmed on site</td></tr>
+    <tr><td class="no">Quote licensed electrical or plumbing work</td><td>takes only minor jobs, refers everything else</td></tr>
+    <tr><td class="no">Accept appliance, pest, or pool work</td><td>declines and names the right kind of company</td></tr>
+    <tr><td class="no">Install a central AC or upgrade a panel</td><td>refers to a certified specialist</td></tr>
+    <tr><td class="no">Take a full kitchen or bath gut</td><td>recommends a general contractor</td></tr>
+    <tr><td class="no">Claim a trade licence</td><td>states it is an insured Texas LLC, which is what it is</td></tr>
+    <tr><td class="no">Say it is open on Sunday</td><td>it is closed, and says so</td></tr>
+    <tr><td class="no">Offer Venmo</td><td>takes cash, check, Zelle, and card with a 3% fee</td></tr>
+  </table>
+
+  <div class="callout">
+    <b>Why this is the feature.</b> A machine that stays inside its limits is
+    cheap and safe. The value is that it never needs to be supervised, and it never
+    puts a price on a job the contractor cannot honour.
+  </div>
+</section>
+
+</body>
+</html>
