@@ -137,10 +137,41 @@ export async function initiateCallback(order: WorkOrder): Promise<void> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const fromNumber = process.env.TWILIO_PHONE_NUMBER;
-  const bossPhone = process.env.TWILIO_BOSS_PHONE;
+
+  // The boss's phone lives on the `bosses` row — that is the value verified
+  // against Handy Works' public contact details. TWILIO_BOSS_PHONE is only a
+  // fallback, because it silently drifted to the wrong number once and the
+  // click-to-call SMS then went to the wrong handset.
+  let bossPhone: string | null = null;
+  try {
+    const { data: bossRow } = await supabase
+      .from("bosses")
+      .select("phone")
+      .eq("id", order.boss_id)
+      .maybeSingle();
+    bossPhone = (bossRow as { phone?: string } | null)?.phone ?? null;
+  } catch {
+    // fall through to the env fallback
+  }
+
+  const envBossPhone = process.env.TWILIO_BOSS_PHONE;
+  if (envBossPhone && bossPhone && envBossPhone !== bossPhone) {
+    console.warn(
+      `[notify] TWILIO_BOSS_PHONE (${envBossPhone}) disagrees with the bosses row ` +
+        `(${bossPhone}) — using the bosses row. Fix TWILIO_BOSS_PHONE.`,
+    );
+  }
+  if (!bossPhone) bossPhone = envBossPhone ?? null;
 
   if (!accountSid || !authToken || !fromNumber || !bossPhone) {
     console.warn("[notify] Twilio not configured for callback");
+    return;
+  }
+
+  const ready = await checkTwilioReady();
+  if (!ready.ok) {
+    console.error(`[notify] Twilio cannot send SMS — ${ready.reason}. The boss was NOT notified.`);
+    await logNotification(order.id, "sms", bossPhone, "Call back request", "failed", ready.reason);
     return;
   }
 
