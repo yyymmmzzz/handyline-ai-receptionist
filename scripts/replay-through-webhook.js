@@ -18,6 +18,7 @@
  */
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 
 const ROOT = path.join(__dirname, "..");
 const ENV = fs.readFileSync(path.join(ROOT, ".env.local"), "utf-8");
@@ -69,12 +70,31 @@ async function mgmtQuery(sql) {
     const prior = before[0] || null;
 
     const payload = JSON.parse(row.p);
-    const res = await fetch(WEBHOOK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const body = await res.text();
+    // Node's TLS stack intermittently times out against the Vercel domain
+    // from this network while curl is fine — so use curl for the POST.
+    const out = execFileSync(
+      "curl",
+      [
+        "-sS",
+        "--http1.1",
+        "--max-time",
+        "60",
+        "-w",
+        "\n%{http_code}",
+        "-X",
+        "POST",
+        WEBHOOK_URL,
+        "-H",
+        "Content-Type: application/json",
+        "--data",
+        JSON.stringify(payload),
+      ],
+      { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 },
+    );
+    const cut = out.lastIndexOf("\n");
+    const status = Number(out.slice(cut + 1).trim());
+    const body = out.slice(0, cut);
+    const res = { status, text: async () => body };
     if (res.status !== 200) {
       failed++;
       console.log(`✗ ${callId} — HTTP ${res.status} ${body.slice(0, 120)}`);
