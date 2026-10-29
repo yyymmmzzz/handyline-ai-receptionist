@@ -16,6 +16,16 @@ import type {
 
 export interface ExtractedCallData {
   decision: AIDecision;
+  /**
+   * Where the decision came from:
+   * - "tool"    — the AI called end_call / flag_urgent / flag_uncertain.
+   * - "default" — the AI called none of them, so the decision is a guess.
+   *
+   * The AI sometimes narrates the closing line and never calls the tool.
+   * That must not be mistaken for a real "unsure", so callers use this flag
+   * to fall back to a transcript-based classification.
+   */
+  decisionSource: "tool" | "default";
   reason: string | null;
   issueType: IssueType | null;
   summary: string | null;
@@ -180,17 +190,21 @@ export function extractCallData(
   // Decision
   let decision: AIDecision = "unsure";
   let reason: string | null = null;
+  let decisionSource: "tool" | "default" = "default";
 
   if (endCall) {
     const outcome = endCall.function.arguments?.outcome as AIDecision | undefined;
     if (outcome && ["accepted", "urgent", "unsure", "rejected"].includes(outcome)) {
       decision = outcome;
+      decisionSource = "tool";
     }
   } else if (flagUrgent) {
     decision = "urgent";
+    decisionSource = "tool";
     reason = (flagUrgent.function.arguments?.reason as string) || null;
   } else if (flagUncertain) {
     decision = "unsure";
+    decisionSource = "tool";
     reason = (flagUncertain.function.arguments?.reason as string) || null;
   }
 
@@ -380,6 +394,7 @@ export function extractCallData(
 
   return {
     decision,
+    decisionSource,
     reason,
     issueType,
     summary,

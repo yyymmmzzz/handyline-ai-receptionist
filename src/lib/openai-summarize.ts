@@ -271,6 +271,99 @@ export async function summarizeWithLLM(
 }
 
 /**
+ * Classify a call outcome from the transcript alone.
+ *
+ * WHY: the AI sometimes narrates its closing line ("Have a good day", "That's
+ * outside what we do ourselves") and never calls the end_call tool. The work
+ * order then landed with ai_decision="unsure" — a guess, not a decision — and
+ * an urgent call could look like a routine question. The tool call is the
+ * source of truth when it exists; this is the fallback when it does not, so
+ * a call always lands with a real decision.
+ *
+ * The rules below are the same ones the assistant's prompt gives the AI, so
+ * both paths classify a call the same way.
+ *
+ * Returns null when no key is configured or the call fails — callers then keep
+ * their default decision. Never throws.
+ */
+export async function classifyCallOutcome(
+  transcript: Array<{ role: string; text: string }>,
+  extraContext?: { callId?: string; source?: string },
+): Promise<"accepted" | "urgent" | "unsure" | "rejected" | null> {
+  if (!process.env.OPENAI_API_KEY) return null;
+  const client = getOpenAIClient();
+  if (!client) return null;
+  if (!transcript.length) return null;
+
+  const system = `You classify one phone call for a home services business.
+
+Return ONE word — the outcome of the call:
+
+- "urgent"  — a safety emergency: burst pipe with water everywhere, gas
+              smell, smoke/sparks/fire, whole-house power loss, active leak
+              damaging the structure, business HVAC down with stock at risk.
+- "accepted" — the customer wants the job done: they gave a name, a callback
+              number, picked a time, or asked us to come out.
+- "rejected" — we do not do that work at all (pest control, slab/structural
+              leaks, full gut renovation, central AC install, gas line work,
+              panel upgrade, appliances) or the job is outside our service area.
+- "unsure"   — the customer ONLY asked questions and never asked us to come
+              out (prices, hours, payment, "what do you do?"), or asked to talk
+              to a person, or the call was cut short.
+
+Rules:
+- Safety first: if the transcript mentions gas, fire, smoke, sparks, water
+  everywhere, a burst pipe, or losing power, answer "urgent".
+- If the customer gave a name AND a callback number AND a time, answer
+  "accepted" even if they also asked questions.
+- If the customer only asked questions, answer "unsure" — do not invent a
+  booking.
+- Answer with exactly one of: accepted, urgent, unsure, rejected.`;
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content: transcript
+            .map((m) => `${m.role === "user" ? "Customer" : "AI"}: ${m.text}`)
+            .join("\n"),
+        },
+      ],
+      temperature: 0,
+      max_tokens: 10,
+    });
+
+    const raw = (completion.choices[0].message.content || "").trim().toLowerCase();
+    const match = raw.match(/accepted|urgent|unsure|rejected/);
+    if (!match) return null;
+
+    const u = completion.usage;
+    if (u) {
+      const cost = u.prompt_tokens * COST_PER_M_INPUT + u.completion_tokens * COST_PER_M_OUTPUT;
+      await logLlmUsage(
+        extraContext?.callId ?? null,
+        `${extraContext?.source ?? "webhook"}:outcome`,
+        completion.model,
+        u.prompt_tokens,
+        u.completion_tokens,
+        cost,
+      );
+    }
+    return match[0] as "accepted" | "urgent" | "unsure" | "rejected";
+  } catch (err) {
+    console.warn(
+      `[openai-summarize] outcome classification failed: ${
+        err instanceof Error ? err.message.slice(0, 100) : String(err)
+      }`,
+    );
+    return null;
+  }
+}
+
+/**
  * Best-effort summarize: try LLM first, fall back to regex.
  * Returns CallSummary and a flag indicating which path was used.
  */

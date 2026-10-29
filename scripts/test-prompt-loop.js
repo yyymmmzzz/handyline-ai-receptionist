@@ -15,9 +15,16 @@
  *   L2  2026-10-14 17:35Z  "Do you install Gmail?"        -> opener x1  (recovered)
  *   L3  2026-10-29 01:04Z  "My roof is leaking"            -> correct   (must stay correct)
  *
+ * IMPORTANT — the opener echo is PROBABILISTIC, not deterministic. With the
+ * known-bad prompt in scripts/fixtures/ it reproduced the production failure
+ * exactly ("What's the issue?" three times) on some runs and not on others —
+ * same model, same temperature 0.2. So do NOT assert that the old prompt
+ * always fails; it does not. What this suite asserts is the thing we care
+ * about: the LIVE prompt never echoes the opener, on any run.
+ *
  * Run:
  *   node scripts/test-prompt-loop.js
- *   node scripts/test-prompt-loop.js --prompt-file /tmp/old-prompt.md
+ *   node scripts/test-prompt-loop.js --prompt-file scripts/fixtures/system-prompt-2026-09-30.md
  *   OPENAI_CHAT_BASE_URL=https://demo-navy-chi-47.vercel.app/api/admin/prompt-check \
  *     node scripts/test-prompt-loop.js
  *
@@ -30,6 +37,7 @@
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
+const { execFileSync } = require("child_process");
 
 const envPath = path.join(__dirname, "..", ".env.local");
 for (const line of fs.readFileSync(envPath, "utf-8").split("\n")) {
@@ -169,21 +177,52 @@ async function chat(messages) {
   if (useProxy) headers["x-admin-token"] = ADMIN_TOKEN;
   else headers["Authorization"] = `Bearer ${OPENAI_API_KEY}`;
 
-  const r = await httpsJson(
-    useProxy ? target.toString() : "https://api.openai.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers,
-      timeout: 90000,
-    },
-    {
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      max_tokens: 150,
-      messages,
-      tools: TOOLS,
-    },
-  );
+  const body = {
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+    max_tokens: 150,
+    messages,
+    tools: TOOLS,
+  };
+
+  if (useProxy) {
+    // Node's TLS stack intermittently times out against the Vercel domain
+    // from this network while curl is fine — so use curl for the proxy hop.
+    const out = execFileSync(
+      "curl",
+      [
+        "-sS",
+        "--http1.1",
+        "--max-time",
+        "90",
+        "-w",
+        "\n%{http_code}",
+        "-X",
+        "POST",
+        target.toString(),
+        "-H",
+        "Content-Type: application/json",
+        "-H",
+        `x-admin-token: ${ADMIN_TOKEN}`,
+        "--data",
+        JSON.stringify(body),
+      ],
+      { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 },
+    );
+    const cut = out.lastIndexOf("\n");
+    const status = Number(out.slice(cut + 1).trim());
+    const data = out.slice(0, cut);
+    if (status < 200 || status >= 300) {
+      throw new Error(`chat ${status}: ${data.slice(0, 300)}`);
+    }
+    return JSON.parse(data);
+  }
+
+  const r = await httpsJson("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers,
+    timeout: 90000,
+  }, body);
   if (r.status !== 200) {
     throw new Error(`chat ${r.status}: ${JSON.stringify(r.body).slice(0, 300)}`);
   }
@@ -226,21 +265,21 @@ const SCENARIOS = [
       "Do you install TV now?",
       "What kind of work do you offer",
     ],
-    mustNotSay: [/what'?s the issue/i, /what is the issue/i, /what'?s the problem/i],
+    mustNotSay: [/what['’]?s the issue/i, /what is the issue/i, /what['’]?s (the |your )?(problem|repair)/i],
     firstReplyMustMatch: [/tv/i],
   },
   {
     id: "L2",
     label: "2026-10-14 17:35Z — the sibling call (opener x1)",
     turns: ["Do you install Gmail?", "Now do you do you mount TV"],
-    mustNotSay: [/what'?s the issue/i, /what is the issue/i, /what'?s the problem/i],
+    mustNotSay: [/what['’]?s the issue/i, /what is the issue/i, /what['’]?s (the |your )?(problem|repair)/i],
     firstReplyMustMatch: [/outside|gmail|it work|email/i],
   },
   {
     id: "L3",
     label: "2026-10-29 01:04Z — the good call (must stay good)",
     turns: ["Hey. My roof is leaking. Uh, are you able to help me fix?"],
-    mustNotSay: [/what'?s the issue/i, /what is the issue/i, /what'?s the problem/i],
+    mustNotSay: [/what['’]?s the issue/i, /what is the issue/i, /what['’]?s (the |your )?(problem|repair)/i],
     firstReplyMustMatch: [/zip/i],
   },
 ];

@@ -6,7 +6,7 @@ import {
 import { getServiceClient } from "./supabase";
 import { notifyBossOfNewOrder } from "./notify";
 import { summarizeCall } from "./call-summary";
-import { summarizeWithFallback, computeSummaryHash } from "./openai-summarize";
+import { summarizeWithFallback, computeSummaryHash, classifyCallOutcome } from "./openai-summarize";
 import { persistRecording, isPermanentRecording } from "./recording-storage";
 import type { IssueType } from "./types";
 
@@ -176,8 +176,27 @@ export async function createOrUpdateWorkOrder(
   const customerName = (endOfCall.call?.customer?.name as string | undefined) || null;
 
   // Extract AI decision from tool calls
-  const { decision, reason, issueType, summary, quoteLow, quoteHigh, pricingBreakdown, customerAddress, customerZipcode, issueDetails, preferredTime, acceptedTopics: acceptedTopicsRaw, rejectedTopics: rejectedTopicsRaw } =
+  const { decision: extractedDecision, reason: extractedReason, decisionSource, issueType, summary, quoteLow, quoteHigh, pricingBreakdown, customerAddress, customerZipcode, issueDetails, preferredTime, acceptedTopics: acceptedTopicsRaw, rejectedTopics: rejectedTopicsRaw } =
     extractCallData(boss, endOfCall);
+
+  // The transcript is needed both for the summary and for the outcome
+  // fallback below, so build it before either runs.
+  const transcript = buildTranscript(endOfCall);
+
+  // The AI sometimes narrates its closing line and never calls the end_call
+  // tool. The tool call is the source of truth when it exists — but when it
+  // does not, "unsure" is a guess, not a decision, and an urgent call can
+  // look like a routine question. Classify from the transcript instead.
+  let decision = extractedDecision;
+  let reason = extractedReason;
+  if (decisionSource === "default") {
+    const inferred = await classifyCallOutcome(transcript, { callId });
+    if (inferred) {
+      decision = inferred;
+      reason = "inferred from transcript (the AI did not call end_call)";
+      console.log(`[order] No end_call tool — outcome inferred as "${inferred}" for call ${callId}`);
+    }
+  }
 
   // Upsert customer
   let customerId: string | null = null;
@@ -210,7 +229,6 @@ export async function createOrUpdateWorkOrder(
   // Extract customer name from transcript (more reliable than caller ID)
   // and generate follow-up + intent summary. Uses LLM if OPENAI_API_KEY is
   // set, otherwise falls back to regex (call-summary.ts).
-  const transcript = buildTranscript(endOfCall);
   const { summary: callSummary, source: summarySource } = await summarizeWithFallback(
     transcript,
     customerName,
