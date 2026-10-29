@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase";
+import { collectFormParams, verifyTwilioSignature, rejectInvalidSignature } from "@/lib/twilio-signature";
 
 /**
  * POST /api/human-line/voice
@@ -50,6 +51,10 @@ function twiml(body: string): NextResponse {
 
 export async function POST(req: NextRequest) {
   const form = await req.formData().catch(() => null);
+  const sigParams = collectFormParams(form);
+  const signatureCheck = verifyTwilioSignature(req, sigParams);
+  const signatureDenied = rejectInvalidSignature(signatureCheck);
+  if (signatureDenied) return signatureDenied;
   const params = Object.fromEntries((form?.entries() as Iterable<[string, string]>) ?? []);
 
   const to = params.To || "";

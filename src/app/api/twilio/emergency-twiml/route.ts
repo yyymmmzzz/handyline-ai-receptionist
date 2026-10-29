@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase";
+import { collectFormParams, verifyTwilioSignature, rejectInvalidSignature } from "@/lib/twilio-signature";
 
 /**
  * TwiML endpoint for emergency outbound calls.
@@ -19,6 +20,13 @@ import { getServiceClient } from "@/lib/supabase";
  */
 
 export async function POST(req: NextRequest) {
+  // Verify the request really came from Twilio before doing anything with it.
+  const form = await req.formData().catch(() => null);
+  const sigParams = collectFormParams(form);
+  const signatureCheck = verifyTwilioSignature(req, sigParams);
+  const signatureDenied = rejectInvalidSignature(signatureCheck);
+  if (signatureDenied) return signatureDenied;
+
   const orderId = req.nextUrl.searchParams.get("order");
   if (!orderId) {
     // Without an order id, we can't route the decision. Just hang up.

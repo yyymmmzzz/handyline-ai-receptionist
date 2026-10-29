@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { recordBossDecision } from "@/lib/emergency-call";
+import { collectFormParams, verifyTwilioSignature, rejectInvalidSignature } from "@/lib/twilio-signature";
 
 /**
  * Twilio decision callback — invoked when the boss presses a key during
@@ -20,6 +21,10 @@ export async function POST(req: NextRequest) {
 
   // Twilio sends application/x-www-form-urlencoded
   const form = await req.formData();
+  const sigParams = collectFormParams(form);
+  const signatureCheck = verifyTwilioSignature(req, sigParams);
+  const signatureDenied = rejectInvalidSignature(signatureCheck);
+  if (signatureDenied) return signatureDenied;
   const digits = (form.get("Digits") as string | null) || "";
   const callSid = (form.get("CallSid") as string | null) || "";
 

@@ -3,6 +3,7 @@ import { getServiceClient } from "@/lib/supabase";
 import { persistRecording } from "@/lib/recording-storage";
 import { transcribeAudioSafe, plainTextToTranscript } from "@/lib/transcribe";
 import { summarizeWithFallback } from "@/lib/openai-summarize";
+import { collectFormParams, verifyTwilioSignature, rejectInvalidSignature } from "@/lib/twilio-signature";
 
 /**
  * POST /api/human-line/recording
@@ -32,6 +33,12 @@ async function readForm(req: NextRequest): Promise<Record<string, string>> {
 }
 
 export async function POST(req: NextRequest) {
+  const form = await req.formData().catch(() => null);
+  const sigParams = collectFormParams(form);
+  const signatureCheck = verifyTwilioSignature(req, sigParams);
+  const signatureDenied = rejectInvalidSignature(signatureCheck);
+  if (signatureDenied) return signatureDenied;
+
   const params = await readForm(req);
   const recordingUrl = params.RecordingUrl || "";
   const callSid = params.CallSid || "";

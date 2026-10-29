@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServiceClient } from "@/lib/supabase";
+import { collectFormParams, verifyTwilioSignature, rejectInvalidSignature } from "@/lib/twilio-signature";
 
 /**
  * Twilio status callback — fires when the emergency call state changes
@@ -14,6 +15,10 @@ import { getServiceClient } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   const form = await req.formData();
+  const sigParams = collectFormParams(form);
+  const signatureCheck = verifyTwilioSignature(req, sigParams);
+  const signatureDenied = rejectInvalidSignature(signatureCheck);
+  if (signatureDenied) return signatureDenied;
   const callSid = (form.get("CallSid") as string | null) || "";
   const callStatus = (form.get("CallStatus") as string | null) || "";
   const from = (form.get("From") as string | null) || "";
