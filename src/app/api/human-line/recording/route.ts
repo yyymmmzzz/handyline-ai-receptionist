@@ -25,21 +25,18 @@ import { collectFormParams, verifyTwilioSignature, rejectInvalidSignature } from
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/** Twilio posts form-encoded params. */
-async function readForm(req: NextRequest): Promise<Record<string, string>> {
-  const form = await req.formData().catch(() => null);
-  if (!form) return {};
-  return Object.fromEntries(form.entries() as Iterable<[string, string]>);
-}
-
 export async function POST(req: NextRequest) {
+  // The request body can only be read ONCE, so the signature check and the
+  // business logic have to share the same parsed form.
   const form = await req.formData().catch(() => null);
   const sigParams = collectFormParams(form);
   const signatureCheck = verifyTwilioSignature(req, sigParams);
   const signatureDenied = rejectInvalidSignature(signatureCheck);
   if (signatureDenied) return signatureDenied;
 
-  const params = await readForm(req);
+  const params = Object.fromEntries(
+    (form?.entries() as Iterable<[string, string]>) ?? [],
+  );
   const recordingUrl = params.RecordingUrl || "";
   const callSid = params.CallSid || "";
 
