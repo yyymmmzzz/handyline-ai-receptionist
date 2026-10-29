@@ -469,6 +469,10 @@ function mapDecisionToStatus(decision: AIDecision): WorkOrder["status"] {
       return "callback";
     case "rejected":
       return "rejected";
+    case "human_handled":
+      return "pending"; // a person took the call; the boss may still need to follow up
+    default:
+      return "callback";
   }
 }
 

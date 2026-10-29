@@ -8,7 +8,7 @@ export type IssueType =
   | "security" | "alarm" | "cctv" | "autogate" | "access_control" | "door_lock"
   | "general";
 
-export type AIDecision = "accepted" | "urgent" | "unsure" | "rejected";
+export type AIDecision = "accepted" | "urgent" | "unsure" | "rejected" | "human_handled";
 
 /**
  * Result of check_trade tool: does the boss handle this issue type?

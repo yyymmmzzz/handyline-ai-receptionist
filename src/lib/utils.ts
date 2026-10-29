@@ -39,6 +39,7 @@ export function decisionLabel(decision: string): string {
     urgent: "Urgent",
     unsure: "Callback",
     rejected: "Out of scope",
+    human_handled: "Handled by human",
   }[decision] || decision;
 }
 
@@ -48,6 +49,7 @@ export function decisionColor(decision: string): string {
     urgent: "bg-red-100 text-red-800 border-red-200",
     unsure: "bg-amber-100 text-amber-800 border-amber-200",
     rejected: "bg-gray-100 text-gray-600 border-gray-200",
+    human_handled: "bg-purple-100 text-purple-800 border-purple-200",
   }[decision] || "bg-gray-100 text-gray-800 border-gray-200";
 }
 

@@ -207,6 +207,7 @@ function formatSms(boss: Boss, order: WorkOrder): string {
     accepted: "✅ New job",
     unsure: "📞 Callback",
     rejected: "❌ Out of scope",
+    human_handled: "👤 Handled by human",
   }[order.ai_decision];
 
   // Build the price line. If we have a full pricing breakdown, show the
