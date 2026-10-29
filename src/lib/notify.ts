@@ -3,6 +3,64 @@ import { getServiceClient } from "./supabase";
 import twilio from "twilio";
 
 /**
+ * Cached result of the Twilio readiness probe.
+ */
+let twilioCheck: { ok: boolean; reason: string } | null = null;
+
+/**
+ * Check once per process whether this Twilio account can actually send SMS.
+ *
+ * Two things silently break SMS in this account:
+ *   - a Trial that has expired ("Your Trial account has expired")
+ *   - a `from` number that Twilio does not own (the AI line lives on Vapi,
+ *     so sending "from" it through Twilio can never work)
+ *
+ * Without this probe the only symptom is a cryptic Twilio error in the
+ * notifications table, which nobody reads.
+ */
+async function checkTwilioReady(): Promise<{ ok: boolean; reason: string }> {
+  if (twilioCheck) return twilioCheck;
+
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+
+  if (!accountSid || !authToken) {
+    twilioCheck = { ok: false, reason: "twilio_credentials_missing" };
+    return twilioCheck;
+  }
+  if (!fromNumber) {
+    twilioCheck = { ok: false, reason: "twilio_from_number_missing" };
+    return twilioCheck;
+  }
+
+  try {
+    const client = twilio(accountSid, authToken);
+    const account = await client.api.v2010.accounts(accountSid).fetch();
+    if (account.type === "Trial" && account.status !== "active") {
+      twilioCheck = { ok: false, reason: `twilio_trial_${account.status}` };
+      return twilioCheck;
+    }
+    const numbers = await client.incomingPhoneNumbers.list({ limit: 20 });
+    const owned = numbers.filter((n: { phoneNumber: string }) => n.phoneNumber === fromNumber);
+    if (owned.length === 0) {
+      twilioCheck = {
+        ok: false,
+        reason: `twilio_from_not_owned:${fromNumber}`,
+      };
+      return twilioCheck;
+    }
+    twilioCheck = { ok: true, reason: "ok" };
+  } catch (err) {
+    twilioCheck = {
+      ok: false,
+      reason: `twilio_probe_failed:${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+  return twilioCheck;
+}
+
+/**
  * Send an SMS to the boss about a new work order.
  * - For URGENT orders, sends a high-priority SMS immediately.
  * - For others, sends a summary with a tap-to-call-back link.
@@ -18,6 +76,20 @@ export async function notifyBossOfNewOrder(
   if (!accountSid || !authToken || !fromNumber) {
     console.warn("[notify] Twilio not configured — skipping SMS");
     await logNotification(order.id, "sms", boss.phone, order.summary || "New job", "failed", "twilio_not_configured");
+    return;
+  }
+
+  const ready = await checkTwilioReady();
+  if (!ready.ok) {
+    console.error(`[notify] Twilio cannot send SMS — ${ready.reason}. The boss was NOT notified.`);
+    await logNotification(
+      order.id,
+      "sms",
+      boss.phone,
+      formatSms(boss, order),
+      "failed",
+      ready.reason,
+    );
     return;
   }
 

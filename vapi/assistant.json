@@ -14,7 +14,7 @@
     "similarityBoost": 0.75,
     "useSpeakerBoost": true
   },
-  "firstMessage": "Handy Works service desk. What's the issue.",
+  "firstMessage": "Handy Works service desk. What's the issue?",
   "endCallFunctionEnabled": true,
   "endCallPhrases": [
     "have a good day",
@@ -34,7 +34,7 @@
       "type": "function",
       "function": {
         "name": "check_and_quote",
-        "description": "One-shot check: trade in scope + service area + price quote. Call EVERY turn after issue is identified. zipcode optional but pass ASAP. Returns in_trade, matched_trade, in_service, distance_miles, trip_fee, fuel_surcharge, total_trip_fee, range_low, range_high, total_low, total_high, currency_symbol.",
+        "description": "One-shot check: trade in scope + service area + price quote. Call EVERY turn after the issue is identified. zipcode is optional but pass it as soon as the customer gives it. If the result has in_service=null, no ZIP was given yet: ask for the ZIP and do NOT quote a price yet. Returns in_trade, matched_trade, in_service, distance_miles, trip_fee, fuel_surcharge, total_trip_fee, range_low, range_high, total_low, total_high, currency_symbol.",
         "parameters": {
           "type": "object",
           "properties": {
@@ -61,7 +61,7 @@
             },
             "zipcode": {
               "type": "string",
-              "description": "Customer's 5-digit US zip code (optional but recommended — pass ASAP)"
+              "description": "Customer's 5-digit US zip code. Pass as soon as they say it — without it you cannot quote a price."
             }
           },
           "required": [
@@ -112,7 +112,7 @@
       "type": "function",
       "function": {
         "name": "end_call",
-        "description": "End the call with a specific outcome. ALWAYS call this to formally end the call — do not rely on free-text goodbyes.",
+        "description": "End the call with a specific outcome. ALWAYS call this to formally end the call — do not rely on free-text goodbyes. Choose the outcome that matches reality: accepted = customer wants the job done and gave a name, callback number, time, or asked us to come out; unsure = customer only asked questions (price ranges, hours, payment) or asked for a person or hung up; rejected = the work is outside our scope; urgent = safety emergency.",
         "parameters": {
           "type": "object",
           "properties": {
@@ -124,11 +124,11 @@
                 "unsure",
                 "rejected"
               ],
-              "description": "accepted=we'll send someone, urgent=immediate callback, unsure=boss follow-up, rejected=out of scope"
+              "description": "accepted=customer wants us to come out, urgent=safety emergency, unsure=questions only / wants a person / no name given, rejected=out of scope"
             },
             "summary": {
               "type": "string",
-              "description": "One-sentence summary of the call for the boss's records (e.g. 'Kitchen sink leak, 77005, tomorrow morning')"
+              "description": "One short line with the facts for the boss's records, in this order: problem, zip (or 'no zip'), time (or 'no time'), name (or 'no name'), callback (or 'no callback'). Example: 'Kitchen sink leak, 77005, tomorrow morning, Mike, 713-555-0100'"
             }
           },
           "required": [

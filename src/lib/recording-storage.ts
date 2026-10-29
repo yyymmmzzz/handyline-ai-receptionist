@@ -3,13 +3,21 @@
  *
  * THE PROBLEM THIS FIXES (2026-10-01)
  * -----------------------------------
- * Vapi hands back `recordingUrl` values that are *presigned* and expire about
- * 30 minutes after the call ends. `order.ts` was storing that URL verbatim,
- * so every "play recording" link in the dashboard went dead half an hour
- * later. There was no production code that copied the audio anywhere — only
- * the offline `scripts/import-vapi-calls.js` knew how to do it, which is why
- * this went unnoticed: the import script repaired the data, the live path
- * never did.
+ * Vapi hands back recording URLs that expire about 30 minutes after the call
+ * ends. `order.ts` was storing that URL verbatim, so every "play recording"
+ * link in the dashboard went dead half an hour later. There was no production
+ * code that copied the audio anywhere — only the offline
+ * `scripts/import-vapi-calls.js` knew how to do it, which is why this went
+ * unnoticed: the import script repaired the data, the live path never did.
+ *
+ * THE SECOND PROBLEM (found 2026-10-29)
+ * -------------------------------------
+ * The URL that actually works is `artifact.presignedMonoUrl` — it carries
+ * SigV4 query params. The plain `artifact.recordingUrl` is a raw R2 bucket
+ * path: a GET on it returns `400 <Code>InvalidArgument</Code>
+ * <Message>Authorization</Message>`, so feeding that one to this module meant
+ * NO AI call recording was ever stored. Combined with Vapi's 14-day call
+ * history retention, every AI call recording was unrecoverable.
  *
  * WHAT THIS DOES
  * --------------

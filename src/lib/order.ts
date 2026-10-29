@@ -1,4 +1,8 @@
 import type { Boss, VapiWebhookPayload, AIDecision, WorkOrder, PricingBreakdown } from "./types";
+import {
+  extractCallData,
+  buildTranscript,
+} from "./call-extraction";
 import { getServiceClient } from "./supabase";
 import { notifyBossOfNewOrder } from "./notify";
 import { summarizeCall } from "./call-summary";
@@ -218,7 +222,23 @@ export async function createOrUpdateWorkOrder(
 
   // Copy the audio out of Vapi's presigned URL (expires in ~30 min) into our
   // own storage so the dashboard's play link keeps working. Never throws.
-  const recordingUrl = await persistRecording(endOfCall.call?.recordingUrl, callId);
+  //
+  // IMPORTANT: the URL that actually works is `artifact.presignedMonoUrl`
+  // (SigV4-signed query params). `artifact.recordingUrl` / `message.recordingUrl`
+  // are raw bucket paths — a plain GET on them returns 400 "Authorization",
+  // so handing those to persistRecording meant no AI call recording was ever
+  // stored, and Vapi's 14-day retention then wiped them for good.
+  const recordingUrl = await persistRecording(
+    endOfCall.artifact?.presignedMonoUrl ||
+      endOfCall.artifact?.presignedStereoUrl ||
+      endOfCall.artifact?.presignedCustomerUrl ||
+      endOfCall.artifact?.presignedAssistantUrl ||
+      endOfCall.recordingUrl ||
+      endOfCall.artifact?.recordingUrl ||
+      endOfCall.call?.recordingUrl ||
+      null,
+    callId,
+  );
 
   const orderData = {
     boss_id: boss.id,
@@ -246,7 +266,15 @@ export async function createOrUpdateWorkOrder(
     follow_up_recommended: callSummary.followUpRecommended,
     transcript_coherence: callSummary.transcriptCoherence,
     summary_hash: summaryHash,
-    summary: summary || endOfCall.summary || endOfCall.analysis?.summary || null,
+    // Priority: the AI's own end_call summary → Vapi's free-form summary →
+    // the LLM intent summary. Vapi sends `summary: ""` when no analysis plan
+    // is configured, so an empty string must not win over the LLM text.
+    summary:
+      (summary && summary.trim()) ||
+      (typeof endOfCall.summary === "string" && endOfCall.summary.trim()) ||
+      (typeof endOfCall.analysis?.summary === "string" && endOfCall.analysis.summary.trim()) ||
+      callSummary.intentSummary ||
+      null,
     vapi_call_id: callId,
     data_source: dataSource,
     country: country,
@@ -373,254 +401,6 @@ export async function createOrUpdateWorkOrder(
   return order;
 }
 
-interface ExtractedCallData {
-  decision: AIDecision;
-  reason: string | null;
-  issueType: IssueType | null;
-  summary: string | null;
-  quoteLow: number | null;
-  quoteHigh: number | null;
-  pricingBreakdown: PricingBreakdown | null;
-  customerAddress: string | null;
-  customerZipcode: string | null;
-  issueDetails: string | null;
-  preferredTime: string | null;
-  acceptedTopics: string[];
-  rejectedTopics: string[];
-}
-
-/**
- * Extract the AI's decision, customer info, and other details from a
- * Vapi end-of-call report.
- *
- * The data lives in:
- * - endOfCall.toolCallList (function calls made)
- * - endOfCall.analysis.structuredData (custom extraction if configured)
- * - endOfCall.summary (free-form summary)
- * - endOfCall.call.transcript (raw transcript)
- * - endOfCall.messages (full message history)
- */
-function extractCallData(
-  boss: Boss,
-  endOfCall: VapiWebhookPayload["message"],
-): ExtractedCallData {
-  const toolCalls = (endOfCall.toolCallList || endOfCall.toolCalls || []) as Array<{
-    id: string;
-    type: "function";
-    function: {
-      name: string;
-      arguments: Record<string, unknown>;
-      result?: string;
-    };
-  }>;
-  const messages = endOfCall.messages || [];
-
-  // Find the end_call tool invocation
-  const endCall = toolCalls.find((t) => t.function.name === "end_call");
-  const flagUrgent = toolCalls.find((t) => t.function.name === "flag_urgent");
-  const flagUncertain = toolCalls.find((t) => t.function.name === "flag_uncertain");
-  const validateService = toolCalls.find((t) => t.function.name === "validate_service");
-  const getPriceQuote = toolCalls.find((t) => t.function.name === "get_price_quote");
-  // Get ALL check_trade calls — when a customer gets rejected on one issue then
-  // pivots to another, the conversation has 2+ check_trade calls. We want the
-  // LAST one whose result was in_trade=true (the one that led to acceptance),
-  // falling back to the first one if none succeeded.
-  const allCheckTrades = toolCalls.filter((t) => t.function.name === "check_trade");
-  const acceptedCheckTrade = [...allCheckTrades].reverse().find((t) => {
-    try {
-      const r = typeof t.function.result === "string" ? JSON.parse(t.function.result) : t.function.result;
-      return r?.in_trade === true;
-    } catch {
-      return false;
-    }
-  });
-  const checkTrade = acceptedCheckTrade || allCheckTrades[0];
-
-  // Decision
-  let decision: AIDecision = "unsure";
-  let reason: string | null = null;
-
-  if (endCall) {
-    const outcome = endCall.function.arguments?.outcome as AIDecision | undefined;
-    if (outcome && ["accepted", "urgent", "unsure", "rejected"].includes(outcome)) {
-      decision = outcome;
-    }
-  } else if (flagUrgent) {
-    decision = "urgent";
-    reason = (flagUrgent.function.arguments?.reason as string) || null;
-  } else if (flagUncertain) {
-    decision = "unsure";
-    reason = (flagUncertain.function.arguments?.reason as string) || null;
-  }
-
-  // Issue type — take the accepted check_trade if any (handles multi-issue
-  // conversations where the first issue was rejected). Fall back to
-  // validate_service or get_price_quote for single-issue flows.
-  const issueType =
-    (checkTrade?.function.arguments?.issue_type as IssueType | undefined) ||
-    (validateService?.function.arguments?.issue_type as IssueType | undefined) ||
-    (getPriceQuote?.function.arguments?.issue_type as IssueType | undefined) ||
-    null;
-
-  // Accepted vs Rejected topics (B.2) — for multi-issue calls, we split
-  // topics by which check_trade result was in_trade=true vs false.
-  // Used by the dashboard to show the full conversation story (e.g.
-  // Matt: accepted ["hvac"], rejected ["roof"]).
-  // We need to look up each check_trade's RESULT in messages, because
-  // toolCallList sometimes doesn't include the result inline.
-  const checkTradeResultsById = new Map<string, unknown>(); // toolCallId -> result
-  for (const m of messages as Array<{ role?: string; name?: string; toolCallId?: string; result?: unknown }>) {
-    // Vapi uses role="tool" with name=tool_name for tool call results
-    if ((m.role === "tool_call_result" || m.role === "tool") && m.name === "check_trade" && m.toolCallId) {
-      try {
-        const r = typeof m.result === "string" ? JSON.parse(m.result) : m.result;
-        checkTradeResultsById.set(m.toolCallId, r);
-      } catch {
-        // ignore
-      }
-    }
-  }
-  const acceptedTopicsSet = new Set<string>();
-  const rejectedTopicsSet = new Set<string>();
-  for (const c of allCheckTrades) {
-    let inTrade: boolean | null = null;
-    const r = checkTradeResultsById.get(c.id) ?? c.function?.result;
-    if (r) {
-      try {
-        const parsed = typeof r === "string" ? JSON.parse(r) : r;
-        inTrade = (parsed as { in_trade?: boolean })?.in_trade === true;
-      } catch {
-        inTrade = null;
-      }
-    }
-    const it = c.function?.arguments?.issue_type as string | undefined;
-    if (!it) continue;
-    if (inTrade === true) acceptedTopicsSet.add(it);
-    else if (inTrade === false) rejectedTopicsSet.add(it);
-  }
-  if (decision === "rejected" && issueType && !acceptedTopicsSet.has(issueType) && !rejectedTopicsSet.has(issueType)) {
-    rejectedTopicsSet.add(issueType);
-  }
-
-  // Price quote
-  let quoteLow: number | null = null;
-  let quoteHigh: number | null = null;
-  let pricingBreakdown: PricingBreakdown | null = null;
-  if (getPriceQuote?.function.result) {
-    try {
-      const parsed = typeof getPriceQuote.function.result === "string"
-        ? JSON.parse(getPriceQuote.function.result)
-        : (getPriceQuote.function.result as unknown);
-      if (parsed?.range) {
-        quoteLow = parsed.range.low;
-        quoteHigh = parsed.range.high;
-      }
-      if (parsed?.available) {
-        pricingBreakdown = {
-          trip_fee: parsed.trip_fee,
-          fuel_surcharge: parsed.fuel_surcharge ?? 0,
-          total_trip_fee: parsed.total_trip_fee ?? parsed.trip_fee,
-          range_low: parsed.range.low,
-          range_high: parsed.range.high,
-          total_low: parsed.total_low ?? parsed.range.low + (parsed.total_trip_fee ?? parsed.trip_fee),
-          total_high: parsed.total_high ?? parsed.range.high + (parsed.total_trip_fee ?? parsed.trip_fee),
-          distance_miles: parsed.distance_miles ?? null,
-          free_distance_miles: boss.free_distance_miles,
-          surcharge_per_mile: boss.distance_surcharge_per_mile,
-        };
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // If we have a distance from validate_service but no get_price_quote result
-  // (e.g. customer said no to quote), still try to build a minimal pricing breakdown
-  if (!pricingBreakdown) {
-    const validateResult = validateService?.function.result
-      ? tryParseJson(validateService.function.result)
-      : null;
-    const validateDistance = (validateResult?.distance_miles as number | null | undefined) ?? null;
-    const validateOk = (validateResult?.ok as boolean | undefined) ?? true;
-    if (validateDistance != null && issueType && validateOk) {
-      // Use price list to backfill a breakdown even if the AI never asked for a quote
-      const band = boss.price_list[issueType];
-      if (band) {
-        const extra = Math.max(0, validateDistance - boss.free_distance_miles);
-        const surcharge = Math.round(extra * boss.distance_surcharge_per_mile);
-        const totalTrip = boss.diagnostic_fee + surcharge;
-        pricingBreakdown = {
-          trip_fee: boss.diagnostic_fee,
-          fuel_surcharge: surcharge,
-          total_trip_fee: totalTrip,
-          range_low: band.low,
-          range_high: band.high,
-          total_low: band.low + totalTrip,
-          total_high: band.high + totalTrip,
-          distance_miles: validateDistance,
-          free_distance_miles: boss.free_distance_miles,
-          surcharge_per_mile: boss.distance_surcharge_per_mile,
-        };
-        quoteLow = band.low;
-        quoteHigh = band.high;
-      }
-    }
-  }
-
-  // Customer info — try structured data first, then fall back to message parsing
-  let customerAddress: string | null = null;
-  let customerZipcode: string | null = null;
-  let issueDetails: string | null = null;
-  let preferredTime: string | null = null;
-  let summary: string | null = null;
-
-  if (endCall?.function.arguments?.summary) {
-    summary = endCall.function.arguments.summary as string;
-  }
-
-  // Try structured data from Vapi's analysis
-  const structured = endOfCall.analysis?.structuredData;
-  if (structured && typeof structured === "object") {
-    customerAddress = (structured.address as string) || customerAddress;
-    customerZipcode = (structured.zipcode as string) || customerZipcode;
-    issueDetails = (structured.issue_details as string) || issueDetails;
-    preferredTime = (structured.preferred_time as string) || preferredTime;
-  }
-
-  // Last resort: parse summary
-  if (!summary && endOfCall.summary) {
-    summary = endOfCall.summary;
-  }
-  if (!summary && endOfCall.analysis?.summary) {
-    summary = endOfCall.analysis.summary;
-  }
-
-  return {
-    decision,
-    reason,
-    issueType,
-    summary,
-    quoteLow,
-    quoteHigh,
-    pricingBreakdown,
-    customerAddress,
-    customerZipcode,
-    issueDetails,
-    preferredTime,
-    acceptedTopics: Array.from(acceptedTopicsSet),
-    rejectedTopics: Array.from(rejectedTopicsSet),
-  };
-}
-
-function tryParseJson(value: unknown): Record<string, unknown> | null {
-  if (!value) return null;
-  try {
-    return typeof value === "string" ? JSON.parse(value) : (value as Record<string, unknown>);
-  } catch {
-    return null;
-  }
-}
-
 function mapDecisionToStatus(decision: AIDecision): WorkOrder["status"] {
   switch (decision) {
     case "accepted":
@@ -634,35 +414,3 @@ function mapDecisionToStatus(decision: AIDecision): WorkOrder["status"] {
   }
 }
 
-function buildTranscript(endOfCall: VapiWebhookPayload["message"]): Array<{ role: string; text: string; ts?: number }> {
-  const messages = endOfCall.messages || [];
-  if (messages.length > 0) {
-    return messages
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({
-        role: m.role,
-        text: m.message || m.content || "",
-        ts: m.time,
-      }));
-  }
-
-  // Fallback: parse raw transcript
-  const raw = endOfCall.call?.transcript || endOfCall.transcript_combined;
-  if (!raw) return [];
-
-  // Simple split by "Assistant:" / "User:" markers
-  const lines = raw.split(/\n/);
-  const out: Array<{ role: string; text: string }> = [];
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    if (trimmed.toLowerCase().startsWith("assistant:")) {
-      out.push({ role: "assistant", text: trimmed.slice("assistant:".length).trim() });
-    } else if (trimmed.toLowerCase().startsWith("user:")) {
-      out.push({ role: "user", text: trimmed.slice("user:".length).trim() });
-    } else {
-      out.push({ role: "user", text: trimmed });
-    }
-  }
-  return out;
-}

@@ -188,7 +188,8 @@ export interface VapiWebhookPayload {
 
     // Transcript fields
     transcript?: string;
-    role?: "user" | "assistant" | "system";
+    // Vapi uses "bot" for the assistant's own turns (not "assistant").
+    role?: "user" | "assistant" | "bot" | "system";
 
     // Tool calls (Vapi sends both; toolCallList is the "completed" list with results)
     toolCalls?: Array<{
@@ -213,15 +214,51 @@ export interface VapiWebhookPayload {
     // End of call report
     summary?: string;
     transcript_combined?: string;
+    // Recording lives at message level (and mirrored inside artifact) — NOT
+    // on message.call. See order.ts persistRecording() call site.
+    recordingUrl?: string;
+    stereoRecordingUrl?: string;
+    artifact?: {
+      recordingUrl?: string;
+      stereoRecordingUrl?: string;
+      // SigV4-signed URLs — these are the ONLY ones that can actually be
+      // fetched. `recordingUrl` is a raw bucket path and returns 400.
+      presignedMonoUrl?: string;
+      presignedStereoUrl?: string;
+      presignedCustomerUrl?: string;
+      presignedAssistantUrl?: string;
+      presignedUrlsExpiresAt?: string;
+      transcript?: string;
+      messages?: unknown[];
+    };
     messages?: Array<{
-      role: "user" | "assistant" | "system" | "tool";
+      // "bot" = the AI, "tool_calls" = a function-call turn,
+      // "tool_call_result" = a function result turn.
+      role: "user" | "assistant" | "bot" | "system" | "tool" | "tool_calls" | "tool_call_result";
       message?: string;
+      // Vapi puts the spoken text here for bot/user turns.
+      messageContent?: string;
       content?: string;
       time?: number;
+      name?: string;
+      toolCallId?: string;
+      result?: unknown;
       toolCalls?: Array<{
-        name: string;
-        arguments: Record<string, unknown>;
+        id?: string;
+        type?: string;
+        name?: string;
+        arguments?: Record<string, unknown> | string;
         result?: string;
+        function?: {
+          name: string;
+          arguments: Record<string, unknown> | string;
+          result?: string;
+        };
+      }>;
+      toolCallResults?: Array<{
+        id?: string;
+        name?: string;
+        result?: unknown;
       }>;
     }>;
     analysis?: {

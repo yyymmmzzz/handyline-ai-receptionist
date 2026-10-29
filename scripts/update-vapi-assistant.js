@@ -93,6 +93,11 @@ console.log(`  tools: ${cfg.tools.length}`);
 console.log(`  silenceTimeout: ${cfg.silenceTimeoutSeconds}s / responseDelay: ${cfg.responseDelaySeconds}s / llmDelay: ${cfg.llmRequestDelaySeconds}s`);
 console.log(`  systemPrompt: ${cfg.model.systemPrompt.length} chars`);
 
+if (process.env.SET_SERVER_URL_SECRET === "1" && !process.env.WEBHOOK_SECRET) {
+  console.error("✗ SET_SERVER_URL_SECRET=1 but WEBHOOK_SECRET is not set — refusing to push.");
+  process.exit(1);
+}
+
 const body = JSON.stringify({
   name: cfg.name,
   model: {
@@ -115,7 +120,20 @@ const body = JSON.stringify({
   llmRequestDelaySeconds: cfg.llmRequestDelaySeconds,
   maxDurationSeconds: cfg.maxDurationSeconds,
   serverUrl: cfg.serverUrl,
-  serverUrlSecret: process.env.WEBHOOK_SECRET || cfg.serverUrlSecret,
+  // serverUrlSecret is deliberately NOT included.
+  //
+  // The live assistant currently has no secret, and the deployed webhook
+  // tolerates a missing header (it only rejects a MISMATCHED one). Pushing
+  // our local WEBHOOK_SECRET would make Vapi start sending a header — and
+  // if that value differs from the one on Vercel, every webhook would 401
+  // and the whole pipeline would go dark. We cannot compare the two from
+  // here, so leave the live value untouched.
+  //
+  // Opt in deliberately once the Vercel env is confirmed to match:
+  //   SET_SERVER_URL_SECRET=1 node scripts/update-vapi-assistant.js
+  ...(process.env.SET_SERVER_URL_SECRET === "1"
+    ? { serverUrlSecret: process.env.WEBHOOK_SECRET || cfg.serverUrlSecret }
+    : {}),
 });
 
 const req = https.request(
