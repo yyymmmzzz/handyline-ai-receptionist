@@ -250,6 +250,17 @@ async function testSystemPrompt(assistant) {
     { pattern: /总的来说|大概/, name: "No Chinese (TTS misreads)", shouldFail: true },
     { pattern: /Alex and Abel/, name: "Mentions both co-owners" },
     { pattern: /Final price confirmed/i, name: "Uses price caveat (no final price promise)" },
+
+    // --- Opener-echo loop (2026-10-14) ---
+    // The prompt used to script the assistant's first line as
+    // `You: "What's the issue?"`. That literal line is the attractor the
+    // model replayed when a customer asked a question instead of stating a
+    // problem, and it cost a real call. It must never come back.
+    { pattern: /You: "What'?s the issue\?"/, name: "No scripted opener line in the prompt", shouldFail: true },
+    { pattern: /never answer a question with a question/i, name: "Has the 'never answer a question with a question' rule" },
+    { pattern: /Service quick answers/i, name: "Has service quick answers for 'do you do X?'" },
+    { pattern: /TV mounting, sure/i, name: "Quick answer covers TV mounting" },
+    { pattern: /Answer the question they asked/i, name: "Has the 'answer the question they asked' section" },
   ];
 
   for (const c of checks) {

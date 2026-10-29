@@ -13,8 +13,16 @@
  * final validation.
  *
  * Run: node scripts/test-conversations.js
+ *      OPENAI_CHAT_BASE_URL=https://demo-navy-chi-47.vercel.app/api/admin/prompt-check \
+ *        node scripts/test-conversations.js
  *
  * Requires: OPENAI_API_KEY in .env.local
+ *
+ * If api.openai.com is unreachable from this machine, set OPENAI_CHAT_BASE_URL
+ * to the deployed /api/admin/prompt-check route — the request then runs from
+ * Vercel, where OpenAI is reachable. The route needs x-admin-token =
+ * WEBHOOK_SECRET. This is how prompt regressions get caught at all: the
+ * opener-echo loop of 2026-10-14 survived because this suite could not run.
  */
 
 const fs = require("fs");
@@ -44,6 +52,13 @@ const SYS_PROMPT_PATH = path.join(__dirname, "..", "vapi", "system-prompt.md");
 const md = fs.readFileSync(SYS_PROMPT_PATH, "utf-8");
 const codeBlocks = [...md.matchAll(/```\n([\s\S]+?)\n```/g)].map((m) => m[1]);
 const SYSTEM_PROMPT = codeBlocks.reduce((a, b) => (b.length > a.length ? b : a), "");
+
+// First message — read from the assistant config so the test always uses
+// exactly what is live on Vapi. It used to be hardcoded here and went stale.
+const ASSISTANT_CFG = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "..", "vapi", "assistant.json"), "utf-8"),
+);
+const FIRST_MESSAGE = ASSISTANT_CFG.firstMessage;
 
 // === Test cases ===
 // Inlined here for speed; the canonical source is docs/US-USER-TEST-CASES.md
@@ -78,11 +93,27 @@ const CASES = [
   // Group G: Sub-coordinated
   { id: "TC-S01", category: "coordinated", customer: "I have a roof leak, water coming in through the ceiling when it rains.", expectDecision: "accepted", expectIn: ["coordinate", "partner", "eighty-nine"] },
   { id: "TC-S02", category: "coordinated", customer: "Need a new gas line run to my kitchen for a new stove. 77005.", expectDecision: "accepted", expectIn: ["coordinate", "partner", "eighty-nine"] },
+  // Group H: the customer asks a QUESTION instead of describing a problem.
+  // Real call 2026-10-14: "do you guys install TV now?" -> "What's the issue?" x3.
+  // The AI must answer the question; it must never ask what the issue is.
+  { id: "TC-Q01", category: "question", customer: "Hi. Um, do you guys install TV now?", expectDecision: null, expectIn: ["tv mounting"], mustNotHave: ["what's the issue", "what is the issue"] },
+  { id: "TC-Q02", category: "question", customer: "What kind of work do you offer?", expectDecision: null, expectIn: ["handyman"], mustNotHave: ["what's the issue", "what is the issue"] },
+  { id: "TC-Q03", category: "question", customer: "Do you install Gmail?", expectDecision: null, expectIn: ["outside our scope"], mustNotHave: ["what's the issue", "what is the issue"] },
+  { id: "TC-Q04", category: "question", customer: "Do you install TVs these days?", expectDecision: null, expectIn: ["tv mounting"], mustNotHave: ["what's the issue", "what is the issue"] },
 ];
 
 // === OpenAI call ===
+// Two transports:
+//   1. direct  — POST api.openai.com (needs OpenAI reachable from here)
+//   2. proxy   — POST OPENAI_CHAT_BASE_URL, which forwards to OpenAI from
+//                the deployed app (needed when this machine cannot reach it)
+const CHAT_BASE = process.env.OPENAI_CHAT_BASE_URL;
+const ADMIN_TOKEN = process.env.WEBHOOK_SECRET;
+
 function callOpenAI(messages, tools) {
   return new Promise((resolve, reject) => {
+    const useProxy = !!CHAT_BASE;
+    const target = useProxy ? new URL(CHAT_BASE) : null;
     const body = JSON.stringify({
       model: "gpt-4o-mini",
       temperature: 0.2,
@@ -90,15 +121,20 @@ function callOpenAI(messages, tools) {
       messages,
       tools,
     });
+    const headers = {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(body),
+    };
+    if (useProxy) {
+      headers["x-admin-token"] = ADMIN_TOKEN;
+    } else {
+      headers["Authorization"] = `Bearer ${OPENAI_API_KEY}`;
+    }
     const req = https.request({
-      hostname: "api.openai.com",
-      path: "/v1/chat/completions",
+      hostname: useProxy ? target.hostname : "api.openai.com",
+      path: useProxy ? target.pathname + target.search : "/v1/chat/completions",
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body),
-      },
+      headers,
     }, (res) => {
       let data = "";
       res.on("data", (c) => (data += c));
@@ -172,7 +208,7 @@ async function runCase(c) {
   }];
 
   // First message (what the AI says)
-  const firstMessage = "Handy Works, this is Alex. What's the issue.";
+  const firstMessage = FIRST_MESSAGE;
 
   // The conversation: AI greets, customer says their issue
   const messages = [
@@ -276,6 +312,18 @@ async function runCase(c) {
     const wordCount = allText.split(/\s+/).filter(Boolean).length;
     if (wordCount > 80) {
       issues.push(`too long: ${wordCount} words`);
+    }
+
+    // 7. Global guard — the AI must never echo the opening question.
+    // The 2026-10-14 loop was exactly this, and it cost a real call.
+    if (/\bwhat'?s the issue\b/i.test(allText)) {
+      issues.push("echoed the opening question");
+    }
+
+    // 8. Global guard — answering a customer question with a question.
+    // Allowed: asking for the ZIP. Not allowed: asking what the issue is.
+    if (/\bwhat'?s (the |your )?(problem|repair|issue)\b/i.test(allText)) {
+      issues.push("asked what the problem is instead of answering");
     }
 
     if (issues.length === 0) {
