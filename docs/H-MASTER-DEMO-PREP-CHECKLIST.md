@@ -1,228 +1,228 @@
-# H-Master Demo 上线准备清单（MY / Bintulu）
+# H-Master Demo Go-Live Checklist (MY / Bintulu)
 
-**给：** H-Master Security Services 团队
-**来自：** HandyLine AI 产品组
-**目标：** 8 月底前完成 H-Master 第一阶段 demo 上线
-**最后更新：** 2026-08-24
+**To:** H-Master Security Services Team
+**From:** HandyLine AI Product Group
+**Goal:** Complete the H-Master phase 1 demo go-live by the end of August
+**Last updated:** 2026-08-24
 
-> 整份清单分 4 块：① 业务资料 ② 真实测试 ③ 录音与合规 ④ 上线后跟进。
-> 【必须给】 / 【推荐】 / 【选做】  (按优先级标注)
-> 你们提供后我们会填进 HandyLine AI 系统，AI 就会"认识"你们的业务并正确接电话。
+> This whole checklist is split into 4 parts: ① Business information ② Real testing ③ Recording & compliance ④ Post-launch follow-up.
+> 【Required】 / 【Recommended】 / 【Optional】  (marked by priority)
+> Once you provide them we will fill them into the HandyLine AI system, and the AI will "know" your business and answer calls correctly.
 
 ---
 
-## 一、业务资料（【必须】 必须给完，AI 才能正常接电话）
+## I. Business Information (【Required】 Must be fully provided before the AI can answer calls normally)
 
-### 1.1 公司联系人
+### 1.1 Company Contacts
 
-| 项 | 用途 | 优先级 |
+| Item | Purpose | Priority |
 |---|---|---|
-| **老板 / 主要决策人** 全名 | 紧急工单回拨时 AI 知道找谁 | 【必须】 |
-| **老板手机号**（+60 1x-xxxxxxxx） | 紧急情况 AI 直接打过去 | 【必须】 |
-| **WhatsApp 号码**（同手机号或不同） | 老板看摘要 / 录音的地方 | 【必须】 |
-| **老板邮箱** | 日报 / 周报 | 【必须】 |
-| **备用技术员** 姓名 + 手机 | AI 接不了时人工接手 | 【推荐】 |
-| **前台 / 客服** 姓名 + 手机（非工作时间接单） | 营业时间电话转接对象 | 【选做】 |
+| **Owner / main decision-maker** full name | So the AI knows who to contact when calling back an urgent work order | 【Required】 |
+| **Owner's mobile number** (+60 1x-xxxxxxxx) | The AI calls it directly in an emergency | 【Required】 |
+| **WhatsApp number** (same as the mobile number or a different one) | Where the owner views summaries / recordings | 【Required】 |
+| **Owner's email** | Daily / weekly reports | 【Required】 |
+| **Backup technician** name + mobile | A human takes over when the AI cannot answer | 【Recommended】 |
+| **Receptionist / customer service** name + mobile (takes orders outside working hours) | Who calls are transferred to during business hours | 【Optional】 |
 
-> 联系方式只存我们后台，AI 接电话时**不会**念出你们私人手机号给客户。
+> Contact details are stored only in our back office; when the AI answers a call it will **not** read out your private mobile number to the customer.
 
-### 1.2 价格表（按工种）
+### 1.2 Price List (by trade)
 
-下面是我们目前设的占位值 — **请核对并修改**：
+Below are the placeholder values we have set so far — **please verify and amend them**:
 
-| 服务 | 起步价 (RM) | 高端价 (RM) | 备注 |
+| Service | Starting price (RM) | Premium price (RM) | Notes |
 |---|---|---|---|
-| 上门检测费 (trip fee) | 89 | 89 | 一次上门固定 |
-| 报警器 service / install | 200 | 1,500 | |
-| CCTV service / install | 500 | 3,000 | 按摄像头数量？ |
-| 自动闸 service / install | 500 | 2,500 | |
-| 门禁 service / install | 300 | 1,500 | |
-| 智能门锁 (Samsung 等) | 300 | 2,000 | |
-| PA / 广播系统 | 200 | 2,000 | |
-| 综合安全方案 (security audit) | 500 | 5,000 | |
+| On-site inspection fee (trip fee) | 89 | 89 | Fixed per visit |
+| Alarm service / install | 200 | 1,500 | |
+| CCTV service / install | 500 | 3,000 | Depends on the number of cameras? |
+| Automated gate service / install | 500 | 2,500 | |
+| Access control service / install | 300 | 1,500 | |
+| Smart door lock (Samsung etc.) | 300 | 2,000 | |
+| PA / public address system | 200 | 2,000 | |
+| Comprehensive security package (security audit) | 500 | 5,000 | |
 
-需要你们确认：
-- [ ] 上面 8 项价格区间是否真实？
-- [ ] 有没有漏掉的服务？比如 intercom、access control for condo、gate sensor？
-- [ ] 急单 / 非工作时间加价多少？（目前我们设的不加价）
-- [ ] 出差到 93xxx（古晋）/ 98xxx（米里）报价怎么加？
+We need you to confirm:
+- [ ] Are the 8 price ranges above realistic?
+- [ ] Are there any missing services? For example intercom, access control for condo, gate sensor?
+- [ ] How much is the surcharge for rush jobs / out-of-hours work? (Currently we have set no surcharge)
+- [ ] How is the quote adjusted for travel to 93xxx (Kuching) / 98xxx (Miri)?
 
-### 1.3 服务范围
+### 1.3 Service Coverage
 
-- [ ] 确认主服务区是 **Bintulu + 周边 50km**？
-- [ ] 接不接受 **93xxx（古晋）/ 98xxx（米里）** 的单？报价策略？
-- [ ] 接不接受 **西马（KL / PJ / Penang）** 的单？目前系统会拒绝
-- [ ] 出差费的计算规则？（每公里？固定一笔？）
+- [ ] Confirm the main service area is **Bintulu + surrounding 50km**?
+- [ ] Do you accept jobs in **93xxx (Kuching) / 98xxx (Miri)**? What is the quoting strategy?
+- [ ] Do you accept jobs in **West Malaysia (KL / PJ / Penang)**? The system currently rejects them
+- [ ] What is the travel fee calculation rule? (Per kilometer? A flat amount?)
 
-### 1.4 营业时间
+### 1.4 Business Hours
 
-目前设的：
-- 周一-五 8:00 – 17:30
-- 周六 8:00 – 13:00
-- 周日 / 公共假期 休息
+Currently set as:
+- Monday-Friday 8:00 – 17:30
+- Saturday 8:00 – 13:00
+- Sunday / public holidays closed
 
-需要确认：
-- [ ] 公共假期你们会放假吗？哪些？（开斋节、农历新年、卫塞节、国庆日、砂拉越日、马来西亚日…）
-- [ ] 非工作时间（非营业时段）希望 AI 怎么接？
-  - 方案 A：只录留言 + 第二天回拨
-  - 方案 B：紧急工单立即打老板手机
-  - 方案 C：两个都做（看情况）
+To be confirmed:
+- [ ] Do you close on public holidays? Which ones? (Hari Raya, Chinese New Year, Wesak Day, National Day, Sarawak Day, Malaysia Day…)
+- [ ] Outside working hours (outside business hours), how do you want the AI to handle the call?
+  - Option A: take a message only + call back the next day
+  - Option B: for an urgent work order, immediately call the owner's mobile
+  - Option C: do both (depending on the situation)
 
-### 1.5 客户白名单 / 黑名单
+### 1.5 Customer Whitelist / Blacklist
 
-- [ ] **VIP 客户**（老客户、大客户）号码 — 这些客户打进来到 AI 这边，AI 会说"welcome back"并调出历史记录
-- [ ] **黑名单号码**（欠款、纠纷、骚扰）— 这些号码直接进"拒绝接听"流程
-- [ ] **同行 / 供应商**（你们会打的）号码 — 这些号码不算客户
+- [ ] **VIP customer** (existing customer, key account) numbers — when these customers call in, the AI will say "welcome back" and pull up the history
+- [ ] **Blacklisted numbers** (outstanding payments, disputes, harassment) — these numbers go straight into the "do not answer" flow
+- [ ] **Competitor / supplier** (the ones you will call) numbers — these numbers are not counted as customers
 
-> 上面这些都**可选**。没给的话所有来电都按"新客户"处理。
+> All of the above is **optional**. If they are not provided, every incoming call is treated as a "new customer".
 
-### 1.6 紧急单触发条件
+### 1.6 Urgent Work Order Trigger Conditions
 
-AI 现在会标"紧急"的场景（请确认 / 修改 / 增删）：
+The scenarios the AI currently flags as "urgent" (please confirm / modify / add or remove):
 
-- [ ] 报警器触发 + 屋内无人（家里没人时报警响）
-- [ ] 商铺 CCTV 全部断电
-- [ ] 自动闸卡住开不了 / 一直开着
-- [ ] 门禁完全失灵（周一早上员工进不了门）
-- [ ] 怀疑有人闯入
-- [ ] 银行 / 珠宝店 / 重要客户 24/7 报警
+- [ ] Alarm triggered + nobody home (the alarm goes off while no one is home)
+- [ ] All CCTV at a shop loses power
+- [ ] Automated gate is stuck and cannot open / stays open all the time
+- [ ] Access control completely fails (on Monday morning staff cannot get through the door)
+- [ ] Suspected break-in
+- [ ] Bank / jewellery store / key customer with 24/7 alarm monitoring
 
-> AI 标紧急后，10 秒内会 **直接打电话给老板**（不是只发推送）。所以请谨慎给"紧急"条件。
+> After the AI flags an emergency it will **call the owner directly within 10 seconds** (not just send a push notification). So please be careful when defining the "urgent" conditions.
 
 ---
 
-## 二、真实测试（【必须】 必须跑完，demo 上线前最后一步）
+## II. Real Testing (【Required】 Must be completed — the last step before the demo go-live)
 
-### 2.1 提供测试号码
+### 2.1 Provide Test Numbers
 
-- [ ] **5-10 个手机号**（你们团队 / 朋友 / 家人的都行）— 我们会用这些号码**真打**到新的 +60 号码，验证 AI 接得对不对
-- [ ] 这些号码**不要**是 H-Master 现有客户（避免误以为是真客户）
-- [ ] 我们也准备了一些**演示剧本**（见下），每通电话会指定一个剧本
+- [ ] **5-10 mobile numbers** (your team / friends / family members are all fine) — we will **really call** these numbers to the new +60 number to verify that the AI answers correctly
+- [ ] These numbers should **not** be existing H-Master customers (to avoid mistaking them for real customers)
+- [ ] We have also prepared some **demo scripts** (see below); each call is assigned one script
 
-### 2.2 推荐测试剧本（10 通）
+### 2.2 Recommended Test Scripts (10 calls)
 
-我们建议 H-Master 团队**先听完 AI 接听，再打分**：
+We suggest the H-Master team **listen to the AI answer first, then score**:
 
-| # | 剧本 | 重点验证 |
+| # | Script | Key point to verify |
 |---|---|---|
-| 1 | "我家报警器一直响，帮我看看" | 普通 accepted 工单 |
-| 2 | "我的 CCTV 一半看不到画面" | 技术诊断能力 |
-| 3 | "我的自动闸开一半卡住，工厂门口堵了" | 紧急 urgent + 老板外呼 |
-| 4 | "你们能装 Samsung 智能锁吗？多少钱？" | 价格查询 + 推荐 |
-| 5 | "我人在古晋，能来安装吗？" | 超出服务区礼貌拒绝 |
-| 6 | "我想整套换掉家里安全系统" | 大单 / 综合方案 |
-| 7 | "你们修车用报警器吗？" | 业务范围外拒绝 |
-| 8 | "老板在吗？我是他朋友" | 白名单处理（如果给白名单） |
-| 9 | "Manglish 风格客户："Kau ada CCTV tak? " | STT 多语言能力 |
-| 10 | "我想要你们 H-Master 报价单" | FAQ 命中率 |
+| 1 | "My home alarm keeps beeping, please come and check it" | Normal accepted work order |
+| 2 | "Half of my CCTV cameras show no picture" | Technical diagnostic capability |
+| 3 | "My automated gate is stuck half open, there is a blockage at the factory entrance" | Urgent + outbound call to the owner |
+| 4 | "Can you install a Samsung smart lock? How much?" | Price enquiry + recommendation |
+| 5 | "I am in Kuching, can you come and install it?" | Polite refusal for out-of-area requests |
+| 6 | "I want to replace my entire home security system" | Large order / comprehensive package |
+| 7 | "Do you use alarms for cars?" | Refusal for out-of-scope requests |
+| 8 | "Is the owner there? I am his friend" | Whitelist handling (if a whitelist is provided) |
+| 9 | "Manglish-style customer: "Kau ada CCTV tak? " | STT multilingual capability |
+| 10 | "I want your H-Master quotation" | FAQ hit rate |
 
-### 2.3 评分维度（每通打完 1-5 分）
+### 2.3 Scoring Dimensions (score 1-5 after each call)
 
-- [ ] 客户说的问题，AI 是否听懂了？（语音识别准确度）
-- [ ] AI 问的问题是否合理（没漏关键信息）
-- [ ] AI 给的价格 / 决策是否符合 H-Master 业务
-- [ ] AI 的语气 / 用词是否像本地接待员
-- [ ] 紧急情况是否正确触发了老板外呼
+- [ ] Did the AI understand the problem the customer described? (speech recognition accuracy)
+- [ ] Are the questions the AI asked reasonable (no key information missed)?
+- [ ] Are the prices / decisions given by the AI consistent with the H-Master business?
+- [ ] Does the AI's tone / wording sound like a local receptionist?
+- [ ] Did emergency situations correctly trigger the outbound call to the owner?
 
-### 2.4 测试时间窗
+### 2.4 Test Time Window
 
-- [ ] H-Master 派 **1-2 个人**全程在测试现场，**至少 2 小时不被打断**
-- [ ] 老板手机保持开机（测试紧急外呼）
-- [ ] 测试完我们提供：通话录音 + AI 自动摘要 + 评分汇总
-
----
-
-## 三、录音 & 合规（【必须】 必须 / 【推荐】 强烈推荐）
-
-### 3.1 录音同意（PDPA 2010 - 必做）
-
-- [ ] **H-Master 服务条款**模板：告知客户"通话可能被录音用于质量保证"
-- [ ] AI 开场白会念"This call may be recorded for quality, ok."（已写进 system prompt）
-- [ ] 是否需要**多语言版本**？（英文 / 马来文 / 中文 / 淡米尔文）
-
-### 3.2 录音存储
-
-- [ ] 录音默认存我们 Supabase 30 天，30 天后自动删除
-- [ ] H-Master 是否要求更短 / 更长？
-- [ ] 客户如果打电话说"请删除我的录音"，流程：
-  - [ ] 方案 A：AI 答"OK, 已记下，24 小时内删"，然后老板 WhatsApp 客户确认
-  - [ ] 方案 B：AI 答"OK, 立即转接老板处理"
-
-### 3.3 客户数据使用
-
-- [ ] 通话内容**不会**用于训练其他客户的 AI（每个 boss 独立 prompt）
-- [ ] 是否允许 H-Master 内部用录音做员工培训？
-- [ ] 录音是否需要脱敏（去掉客户姓名 / 电话）？
+- [ ] H-Master assigns **1-2 people** to be present at the test site throughout, **uninterrupted for at least 2 hours**
+- [ ] The owner's mobile stays switched on (to test urgent outbound calls)
+- [ ] After the test we provide: call recordings + AI auto-summary + score summary
 
 ---
 
-## 四、上线后跟进（【推荐】 推荐 / 【选做】 选做）
+## III. Recording & Compliance (【Required】 Mandatory / 【Recommended】 Strongly recommended)
 
-### 4.1 第一周
+### 3.1 Recording Consent (PDPA 2010 - mandatory)
 
-- [ ] 我们每天发**前一日通话汇总**（接通数 / 决策分布 / 紧急工单）
-- [ ] H-Master 每天查看 1 次**老板待确认工单**（用手机 EMS 或 web）
-- [ ] 任何 AI 答错的问题，**记录下来**给我们，3 天内更新 prompt
+- [ ] **H-Master terms of service** template: telling the customer "calls may be recorded for quality assurance"
+- [ ] The AI opening line will say "This call may be recorded for quality, ok." (already written into the system prompt)
+- [ ] Are **multilingual versions** needed? (English / Malay / Chinese / Iban)
 
-### 4.2 客户案例素材
+### 3.2 Recording Storage
 
-- [ ] 上线满 1 个月，能否提供 1-2 个**真实客户成功案例**（脱敏）？
-- [ ] H-Master 老板 / 技术员**头像 + 简介**（用于"我们的团队"页）
-- [ ] **公司 logo 高清原文件**（PNG / SVG，背景透明）
-- [ ] 2-3 张**工作现场照片**（H-Master 标志性的工作场面）
+- [ ] Recordings are stored in our Supabase for 30 days by default and are deleted automatically after 30 days
+- [ ] Does H-Master require a shorter / longer retention period?
+- [ ] If a customer calls and says "please delete my recording", the process is:
+  - [ ] Option A: the AI answers "OK, noted, will be deleted within 24 hours", then the owner confirms with the customer via WhatsApp
+  - [ ] Option B: the AI answers "OK, transferring to the owner immediately"
 
-### 4.3 联合宣传
+### 3.3 Customer Data Usage
 
-- [ ] 是否允许在 HandyLine AI 官网 / 投资材料里写"H-Master 是我们的第一个马来西亚客户"？
-- [ ] 是否愿意一起做**短视频 / 客户访谈**？
-- [ ] H-Master 现有 Facebook 主页（100063539318730）愿不愿意互相 @ ？
-
-### 4.4 长期功能（之后讨论）
-
-- [ ] 多老板账号（H-Master 有 2-3 个老板 / 销售，需要分别登录吗？）
-- [ ] 多语言（中 / 英 / 马来 / 淡米尔）
-- [ ] 客户回访自动外呼（30 天后问"上次修的报警器还好吗"）
-- [ ] H-Master WhatsApp Business 集成
+- [ ] Call content will **not** be used to train the AI of other customers (each boss has an independent prompt)
+- [ ] Is H-Master allowed to use recordings internally for staff training?
+- [ ] Do the recordings need to be anonymised (customer name / phone number removed)?
 
 ---
 
-## 给 H-Master 的时间表建议
+## IV. Post-Launch Follow-up (【Recommended】 Recommended / 【Optional】 Optional)
 
-| 阶段 | 内容 | 时间 | 谁负责 |
+### 4.1 First Week
+
+- [ ] We send a **summary of the previous day's calls** every day (calls answered / decision breakdown / urgent work orders)
+- [ ] H-Master reviews the **work orders pending the owner's confirmation** once a day (using mobile EMS or web)
+- [ ] Any question the AI answered wrong should be **written down** and sent to us; we update the prompt within 3 days
+
+### 4.2 Customer Case Study Material
+
+- [ ] One month after go-live, can you provide 1-2 **real customer success cases** (anonymised)?
+- [ ] **Photo + short bio** for the H-Master owner / technicians (for the "Our Team" page)
+- [ ] **High-resolution company logo source file** (PNG / SVG, transparent background)
+- [ ] 2-3 **on-site work photos** (iconic H-Master work scenes)
+
+### 4.3 Joint Promotion
+
+- [ ] Do you allow us to write "H-Master is our first Malaysian customer" on the HandyLine AI website / in investor materials?
+- [ ] Are you willing to make **short videos / customer interviews** together?
+- [ ] Is H-Master's existing Facebook page (100063539318730) willing to tag each other (@)?
+
+### 4.4 Long-Term Features (discussed later)
+
+- [ ] Multiple boss accounts (H-Master has 2-3 owners / salespeople, do they need to log in separately?)
+- [ ] Multilingual (Chinese / English / Malay / Iban)
+- [ ] Automatic outbound follow-up calls to customers (30 days later asking "is the alarm we fixed last time still working?")
+- [ ] H-Master WhatsApp Business integration
+
+---
+
+## Timeline Recommendation for H-Master
+
+| Phase | Content | Duration | Owner |
 |---|---|---|---|
-| 准备 | 提供 1.1 - 1.6 全部资料 | 2-3 天 | H-Master |
-| 配置 | 我们写进 system prompt + 工具 + boss 配置 | 1 天 | 我们 |
-| 录音 | 老板录 1-2 分钟语音样本 → ElevenLabs clone | 1-2 天 | H-Master + 我们 |
-| 号码 | Vapi 买 +60 号码 + 绑 MY assistant | 1 天 | 我们 |
-| 内部测试 | 我们用 5 个剧本先自测 | 1 天 | 我们 |
-| **真机测试** | **H-Master 团队 10 个剧本测试** | **1 天** | **H-Master + 我们** |
-| 调优 | 根据测试结果修 prompt | 1-2 天 | 我们 |
-| 正式上线 | 切到真号码，老板开始接听 | 1 天 | 一起 |
-| 第一周 | 每日查看 + 收集问题 | 7 天 | H-Master |
-| 满月 review | 通话数据回顾 + 调整定价 / 服务范围 | 1 天 | 一起 |
+| Preparation | Provide all the materials in 1.1 - 1.6 | 2-3 days | H-Master |
+| Configuration | We write them into the system prompt + tools + boss configuration | 1 day | Us |
+| Recording | The owner records a 1-2 minute voice sample → ElevenLabs clone | 1-2 days | H-Master + Us |
+| Number | Vapi buys a +60 number + binds the MY assistant | 1 day | Us |
+| Internal testing | We self-test with 5 scripts first | 1 day | Us |
+| **Live device testing** | **H-Master team tests with 10 scripts** | **1 day** | **H-Master + Us** |
+| Tuning | Fix the prompt based on the test results | 1-2 days | Us |
+| Official go-live | Switch to the live number, the owner starts answering calls | 1 day | Together |
+| First week | Daily review + collecting issues | 7 days | H-Master |
+| One-month review | Call data review + adjusting pricing / service coverage | 1 day | Together |
 
-**总投入：~3 周**
-
----
-
-## 资料提交方式
-
-请把所有材料（联系人 / 价格 / FAQ / 语音样本）打包发到：
-
-📧 **handyline@bookloh.com** （或你提供的邮箱）
-
-或填这份在线表单（我们建好后发链接）：
-- 联系人信息
-- 价格表
-- 营业时间 / 假期
-- 紧急单规则
-- 白名单 / 黑名单
-- FAQ 列表
-
-语音样本（1-2 分钟 mp3/wav）可以用：
-- WhatsApp 发给我们的对接人
-- 或上传到 Google Drive 给链接
+**Total effort: ~3 weeks**
 
 ---
 
-**有问题随时问！** 我们会陪你们跑完每个阶段。
+## How to Submit the Materials
+
+Please package all the materials (contacts / pricing / FAQ / voice samples) and send them to:
+
+📧 **handyline@bookloh.com** (or the email you provide)
+
+Or fill in this online form (we will send the link once it is built):
+- Contact information
+- Price list
+- Business hours / holidays
+- Urgent work order rules
+- Whitelist / blacklist
+- FAQ list
+
+Voice samples (1-2 minute mp3/wav) can be sent via:
+- WhatsApp to our point of contact
+- Or upload to Google Drive and share the link
+
+---
+
+**Ask us anything!** We will work with you through every stage.

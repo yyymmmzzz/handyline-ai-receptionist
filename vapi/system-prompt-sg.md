@@ -168,7 +168,7 @@ If the customer pushes back, call `flag_uncertain` so the boss calls them back.
 
 ---
 
-## 配套的 Vapi assistant 配置 (assistant-sg.json)
+## Matching Vapi assistant configuration (assistant-sg.json)
 
 ```json
 {

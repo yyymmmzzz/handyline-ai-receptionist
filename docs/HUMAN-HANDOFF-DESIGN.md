@@ -2,37 +2,37 @@
 
 **Date:** 2026-09-13 · **Status:** Design (v0.1) · **Author:** Mavis
 
-> ## ⚠️ 实现状态更新（2026-10-29）
+> ## ⚠️ Implementation status update (2026-10-29)
 >
-> **下面这份设计里的"方案 A（Vapi transferCall）没有采用，最终做的是另一条路。**
-> 原因：Vapi 的转接行为当时无法从我们这边验证（transfer 文档 404），而真人线**不能建立在
-> 一个没验证过的假设上**。2026-10-11 起实际实现的是 **Twilio 独立真人线**：
+> **The "Option A (Vapi transferCall)" approach in the design below was NOT adopted — a different path was built instead.**
+> Reason: Vapi's transfer behaviour could not be verified from our side at the time (the transfer docs returned 404), and the human line **cannot be built
+> on an unverified assumption**. What was actually implemented from 2026-10-11 is the **standalone Twilio human line**:
 >
 > ```
-> 客户拨打真人线号码（Twilio 拥有的号）
->   → /api/human-line/voice      响铃 Alex 的手机（20s）
->      ├─ 接听 → <Record> 双声道录音 + 播报录音提示 → 桥接双方
->      └─ 无人接听 → /api/human-line/no-answer（ai / voicemail / hangup）
->   → 通话结束 → /api/human-line/recording
->      → 录音存 Supabase → 转写 → 摘要 → work_orders（call_type='human'）
+> Customer dials the human line number (a number owned by Twilio)
+>   → /api/human-line/voice      Ring Alex's phone (20s)
+>      ├─ Answered → <Record> stereo recording + play the recording notice → bridge both sides
+>      └─ Not answered → /api/human-line/no-answer (ai / voicemail / hangup)
+>   → Call ends → /api/human-line/recording
+>      → Recording stored in Supabase → transcript → summary → work_orders (call_type='human')
 > ```
 >
-> 与设计稿的差异：
-> | 设计稿 | 实际实现 |
+> Differences from the design draft:
+> | Design draft | Actual implementation |
 > |---|---|
-> | 方案 A：Vapi `transferCall` 转给 Alex | Twilio 独立真人线（第二个号码） |
-> | 新建 `human_calls` 表 | 不新建表 —— 复用 `work_orders`，用 `call_type='human'` 区分 |
-> | 转写用 Vapi 的 transcript | 转写用 `src/lib/transcribe.ts`（OpenAI Whisper） |
-> | 未考虑回调接口鉴权 | 6 个 Twilio 回调现在全部校验 `X-Twilio-Signature` |
-> | 会议纪要只跑在 demo 页（假数据） | 纪要接进真人线生产路径，每通真实来电都生成，存 `work_orders.human_minutes`，页面 `/human-calls` |
+> | Option A: Vapi `transferCall` to Alex | Standalone Twilio human line (a second number) |
+> | New `human_calls` table | No new table — reuse `work_orders`, distinguished by `call_type='human'` |
+> | Transcription via Vapi's transcript | Transcription via `src/lib/transcribe.ts` (OpenAI Whisper) |
+> | Callback endpoint authentication not considered | All 6 Twilio callbacks now validate `X-Twilio-Signature` |
+> | Meeting minutes only ran on the demo page (fake data) | Minutes wired into the human line production path, generated for every real inbound call, stored in `work_orders.human_minutes`, page `/human-calls` |
 >
-> **当前唯一阻塞：Twilio 账号名下 0 个号码**（Trial 且已过期）。买号后：
+> **The only current blocker: 0 numbers under the Twilio account** (Trial, and it has expired). After buying a number:
 > ```bash
-> node scripts/activate-human-line.js +1XXXXXXXXXX   # 一键接线
-> node scripts/check-human-line.js                  # 复查就绪状态
-> node scripts/test-human-line.js                   # 端到端自测（15 项）
+> node scripts/activate-human-line.js +1XXXXXXXXXX   # one-click wiring
+> node scripts/check-human-line.js                  # re-check the readiness status
+> node scripts/test-human-line.js                   # end-to-end self-test (15 checks)
 > ```
-> 下面这份设计稿保留作为决策记录，**不要照它实施**。
+> The design draft below is kept as a decision record — **do not implement it as written**.
 
 ---
 

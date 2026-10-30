@@ -723,7 +723,7 @@ For each call, score 1-5 on:
 - [ ] AI hangs up without "Anything else?" (except urgent)
 - [ ] AI says "5-15" or "120" instead of spelled-out
 - [ ] AI inserts "thousand" between numbers
-- [ ] AI says "大概" or other Chinese words (TTS misreads)
+- [ ] AI says a Chinese word such as "daigai" (roughly) or other Chinese words (TTS misreads)
 - [ ] AI asks for zip in urgent scenarios
 - [ ] AI says "outside our scope" for things we coordinate (roofing, gas, panel, central AC)
 - [ ] Customer from wrong country routes to wrong boss (should be fixed — verify)

@@ -1,245 +1,245 @@
-# US Demo (Alex) — 端到端测试计划
+# US Demo (Alex) — End-to-End Test Plan
 
-**目标:** 验证新版"更直接"AI 接待员在实际电话里的表现
-**测试环境:** Vapi assistant `42523b3e-...` + Vercel 部署 `https://demo-navy-chi-47.vercel.app/`
-**测试电话:** US +1 724 362 0422（Alex 的 Vapi 号码）
+**Goal:** Verify how the new, "more direct" AI receptionist performs on real calls
+**Test environment:** Vapi assistant `42523b3e-...` + Vercel deployment `https://demo-navy-chi-47.vercel.app/`
+**Test phone:** US +1 724 362 0422 (Alex's Vapi number)
 
 ---
 
-## 前置步骤
+## Prerequisite steps
 
-### 0.1 Vercel 重新部署（重要）
+### 0.1 Redeploy on Vercel (important)
 
-之前的 Vercel 项目可能处于暂停状态（因为 private repo 改 public 时的状态）。
+The previous Vercel project may be in a paused state (a leftover from when the private repo was changed to public).
 
-**操作：**
-1. 打开 https://vercel.com/dashboard
-2. 找 `demo` project
-3. 如果显示 "Paused"：点 **Resume** 按钮
-4. 等待 1-2 分钟，URL 恢复
+**Steps:**
+1. Open https://vercel.com/dashboard
+2. Find the `demo` project
+3. If it shows "Paused": click the **Resume** button
+4. Wait 1-2 minutes for the URL to come back
 
-**验证：**
+**Verify:**
 ```bash
 curl -sI https://demo-navy-chi-47.vercel.app/ | head -2
-# 应该看到 HTTP/2 200
+# you should see HTTP/2 200
 ```
 
-### 0.2 准备测试设备
+### 0.2 Prepare the test equipment
 
-- 1 部手机（打 Vapi 号码）
-- 1 部电脑（看 /api/admin/llm-stats 实时统计）
-- 1 个秒表（手动测通话时长）
+- 1 phone (to call the Vapi number)
+- 1 computer (to watch the live stats at /api/admin/llm-stats)
+- 1 stopwatch (to measure call duration manually)
 
-### 0.3 工具
+### 0.3 Tools
 
-- **AI 接待员：** +1 (724) 362-0422
-- **看实时 dashboard：** https://demo-navy-chi-47.vercel.app/?country=us
-- **看 LLM 统计：** https://demo-navy-chi-47.vercel.app/api/admin/llm-stats (header: `x-admin-token: dev-secret`)
+- **AI receptionist:** +1 (724) 362-0422
+- **Watch the live dashboard:** https://demo-navy-chi-47.vercel.app/?country=us
+- **Watch the LLM stats:** https://demo-navy-chi-47.vercel.app/api/admin/llm-stats (header: `x-admin-token: dev-secret`)
 
 ---
 
-## 测试目标
+## Test goals
 
-每通电话打完后立刻评分（5 分制）：
+Score each call immediately after it ends (5-point scale):
 
-| 维度 | 1 分 | 5 分 |
+| Dimension | 1 point | 5 points |
 |---|---|---|
-| 通话时长 | > 60 秒 | < 30 秒 |
-| AI 响应句数 | > 4 句 | ≤ 2 句 |
-| 单句词数 | > 25 词 | ≤ 15 词 |
-| 礼貌废话 | "Sure thing" 等 | 0 |
-| 信息采集 | 漏掉 zip / 时间 / 姓名 | 全齐 |
-| 价格给得 | 通话结束才给 | ZIP 一验证就给 |
-| 决策正确 | 错 | 对 |
+| Call duration | > 60 seconds | < 30 seconds |
+| AI response sentences | > 4 sentences | ≤ 2 sentences |
+| Words per sentence | > 25 words | ≤ 15 words |
+| Polite filler | "Sure thing" etc. | 0 |
+| Info collection | misses zip / time / name | everything captured |
+| Price given | only at the end of the call | given as soon as the ZIP is verified |
+| Correct decision | wrong | correct |
 
-**目标总分 ≥ 30/35（每通都过）**
-
----
-
-## 5 个测试剧本
-
-### 剧本 1：普通 accepted（水管漏水）
-
-**通话内容：**
-```
-你：Hi, I have a kitchen sink that's leaking
-AI：[应该在 5 秒内说 "What's your zip."]
-你：77005
-AI：[应该立刻说 "77005, in service. Trip $89, plumbing $150-400, total大概 $240-490. When works — morning or afternoon? Name + number?"]
-你：Tomorrow morning. Mike, 713-555-0100
-AI：[应该立刻说 "Got it, Mike. Alex calls to confirm. Bye." 然后 end_call]
-```
-
-**预期结果：**
-- 通话时长：< 30 秒
-- AI 句数：3 句（第 1 句问 zip，第 2 句给价格+问时间+姓名，第 3 句结束）
-- 决策：accepted
-- Dashboard：1 条新工单，customer_name=Mike，issue_type=plumbing
-
-**评分：**
-- 通话时长 ____ 秒
-- AI 句数 ____
-- 评分 ____/35
+**Target total score ≥ 30/35 (pass on every call)**
 
 ---
 
-### 剧本 2：紧急 urgent（主管道爆裂）
+## 5 test scripts
 
-**通话内容：**
+### Script 1: Normal accepted (leaking water pipe)
+
+**Call script:**
 ```
-你：My pipe just burst! Water everywhere in my kitchen!
-AI：[应该立刻说 "Stay safe. Alex calls back in 5-15 minutes. Bye." 然后 flag_urgent + end_call]
+You: Hi, I have a kitchen sink that's leaking
+AI:[should say within 5 seconds "What's your zip."]
+You: 77005
+AI:[should immediately say "77005, in service. Trip $89, plumbing $150-400, total approximately $240-490. When works — morning or afternoon? Name + number?"]
+You: Tomorrow morning. Mike, 713-555-0100
+AI:[should immediately say "Got it, Mike. Alex calls to confirm. Bye." then end_call]
 ```
 
-**预期结果：**
-- 通话时长：< 15 秒
-- AI 句数：1-2 句
-- 决策：urgent
-- 你手机会在 30 秒内接到 AI 紧急外呼电话（+1 512 712 6713）
-- Dashboard：1 条工单 ai_decision=urgent
+**Expected results:**
+- Call duration: < 30 seconds
+- AI sentence count: 3 sentences (sentence 1 asks for the zip, sentence 2 gives the price + asks for the time + name, sentence 3 ends the call)
+- Decision: accepted
+- Dashboard: 1 new work order, customer_name=Mike, issue_type=plumbing
 
-**评分：**
-- 通话时长 ____ 秒
-- 紧急外呼收到？____
-- 评分 ____/35
+**Score:**
+- Call duration ____ seconds
+- AI sentence count ____
+- Score ____/35
 
 ---
 
-### 剧本 3：Gas smell（最高级别紧急）
+### Script 2: Emergency urgent (main pipe burst)
 
-**通话内容：**
+**Call script:**
 ```
-你：I smell gas in my house! It's strong!
-AI：[应该立刻说 "Open windows, leave the house, call 911. Alex calls back. Bye." 然后 flag_urgent + end_call]
+You: My pipe just burst! Water everywhere in my kitchen!
+AI:[should immediately say "Stay safe. Alex calls back in 5-15 minutes. Bye." then flag_urgent + end_call]
 ```
 
-**预期结果：**
-- AI 必须说"open windows + 911"安全提示
-- 通话时长：< 15 秒
-- 决策：urgent
-- 紧急外呼 + SMS 给你
+**Expected results:**
+- Call duration: < 15 seconds
+- AI sentence count: 1-2 sentences
+- Decision: urgent
+- Your phone will receive the AI's emergency outbound call within 30 seconds (+1 512 712 6713)
+- Dashboard: 1 work order with ai_decision=urgent
 
-**评分：**
-- AI 提到 911？____
-- AI 提到开窗？____
-- 评分 ____/35
+**Score:**
+- Call duration ____ seconds
+- Emergency outbound call received? ____
+- Score ____/35
 
 ---
 
-### 剧本 4：超出服务范围（Dallas）
+### Script 3: Gas smell (highest-level emergency)
 
-**通话内容：**
+**Call script:**
 ```
-你：Hey, I need someone to fix my water heater. I'm in 75201 (Dallas).
-AI：[应该立刻说 "Outside our 25 mile Houston radius. Try a local contractor. Anything else?" 然后 end_call]
+You: I smell gas in my house! It's strong!
+AI:[should immediately say "Open windows, leave the house, call 911. Alex calls back. Bye." then flag_urgent + end_call]
 ```
 
-**预期结果：**
-- 通话时长：< 20 秒
-- AI 句数：1-2 句
-- 决策：rejected
-- 原因：zip 超出服务范围
+**Expected results:**
+- The AI must give the "open windows + 911" safety instruction
+- Call duration: < 15 seconds
+- Decision: urgent
+- Emergency outbound call + SMS to you
 
-**评分：**
-- AI 明确说"outside our service area"？____
-- AI 推荐其他？____
-- 评分 ____/35
+**Score:**
+- AI mentioned 911? ____
+- AI mentioned opening the windows? ____
+- Score ____/35
 
 ---
 
-### 剧本 5：out-of-scope（pest control）
+### Script 4: Outside the service area (Dallas)
 
-**通话内容：**
+**Call script:**
 ```
-你：I have termites in my house. Can you help?
-AI：[应该说 "Sorry, pest control is outside our scope. Try a pest control service. Have a good day." 然后 end_call]
+You: Hey, I need someone to fix my water heater. I'm in 75201 (Dallas).
+AI:[should immediately say "Outside our 25 mile Houston radius. Try a local contractor. Anything else?" then end_call]
 ```
 
-**预期结果：**
-- 通话时长：< 20 秒
-- AI 句数：1-2 句
-- 决策：rejected
-- 原因：trade 不在 list
+**Expected results:**
+- Call duration: < 20 seconds
+- AI sentence count: 1-2 sentences
+- Decision: rejected
+- Reason: the zip is outside the service area
 
-**评分：**
-- AI 礼貌拒绝？____
-- 推荐其他服务？____
-- 评分 ____/35
+**Score:**
+- AI explicitly said "outside our service area"? ____
+- AI recommended someone else? ____
+- Score ____/35
 
 ---
 
-### 剧本 6（bonus）：想要真人
+### Script 5: out-of-scope (pest control)
 
-**通话内容：**
+**Call script:**
 ```
-你：I need to talk to a real person, not a bot.
-AI：[应该说 "No problem, Alex will call you back. Thanks for your patience." 然后 flag_uncertain + end_call]
+You: I have termites in my house. Can you help?
+AI:[should say "Sorry, pest control is outside our scope. Try a pest control service. Have a good day." then end_call]
 ```
 
-**预期结果：**
-- 通话时长：< 15 秒
-- 决策：unsure
-- Alex 收到 callback 提示
+**Expected results:**
+- Call duration: < 20 seconds
+- AI sentence count: 1-2 sentences
+- Decision: rejected
+- Reason: the trade is not on the list
+
+**Score:**
+- AI declined politely? ____
+- Recommended another service? ____
+- Score ____/35
 
 ---
 
-## 评分汇总表
+### Script 6 (bonus): wants a real person
 
-| 剧本 | 目标时长 | 实际时长 | AI 句数 | 决策 | 总分 |
+**Call script:**
+```
+You: I need to talk to a real person, not a bot.
+AI:[should say "No problem, Alex will call you back. Thanks for your patience." then flag_uncertain + end_call]
+```
+
+**Expected results:**
+- Call duration: < 15 seconds
+- Decision: unsure
+- Alex receives the callback notice
+
+---
+
+## Score summary table
+
+| Script | Target duration | Actual duration | AI sentence count | Decision | Total score |
 |---|---|---|---|---|---|
-| 1. 漏水 | < 30s | | | accepted | /35 |
-| 2. 爆裂 | < 15s | | | urgent | /35 |
+| 1. Leak | < 30s | | | accepted | /35 |
+| 2. Burst | < 15s | | | urgent | /35 |
 | 3. Gas | < 15s | | | urgent | /35 |
 | 4. Dallas | < 20s | | | rejected | /35 |
-| 5. 害虫 | < 20s | | | rejected | /35 |
-| 6. 真人 | < 15s | | | unsure | /35 |
+| 5. Pest | < 20s | | | rejected | /35 |
+| 6. Real person | < 15s | | | unsure | /35 |
 
 ---
 
-## 评分后做这 4 件事
+## 4 things to do after scoring
 
-1. **截图每通电话的 dashboard 行**（确认数据写入）
-2. **记下 AI 哪里说"对/错"了**
-3. **看 /api/admin/llm-stats** 的 LLM 成本（应该比之前低，因为用 gpt-4o-mini）
-4. **听紧急外呼录音**（如果收到）
-
----
-
-## 常见问题排查
-
-### AI 响应太长？
-
-→ 检查 Vapi 里的 `maxTokens` 是否为 80。`scripts/update-vapi-assistant.js` 会 PATCH 这个值。
-
-### AI 没给价格就 end_call？
-
-→ 检查是否在 ZIP 之前就 end_call。重启对话，从 ZIP 重新开始。
-
-### 紧急外呼没收到？
-
-→ 1) 检查 Vapi assistant `serverUrl` 是否为 `https://demo-navy-chi-47.vercel.app/api/vapi/tools`  2) 检查 Vercel project 是否运行  3) 你的紧急手机号 +1 512 712 6713 是否能在工作时间接到
-
-### Dashboard 不显示新通话？
-
-→ 1) 看 /api/admin/llm-stats 有没有 LLM 调用记录  2) 看 Supabase work_orders 表  3) 检查 webhook 是否到达（看 Vercel logs）
+1. **Screenshot the dashboard row of each call** (confirm that the data was written)
+2. **Note where the AI got it right/wrong**
+3. **Check the LLM cost at /api/admin/llm-stats** (it should be lower than before, because gpt-4o-mini is used)
+4. **Listen to the emergency outbound call recording** (if you received one)
 
 ---
 
-## 录音回放
+## Troubleshooting
 
-每通电话的录音会自动保存到 Supabase Storage。查看方式：
+### Is the AI response too long?
 
-1. Dashboard → 点工单行 → 看详情页
-2. 直接查：https://demo-navy-chi-47.vercel.app/orders/[id]
+→ Check whether `maxTokens` in Vapi is 80. `scripts/update-vapi-assistant.js` will PATCH this value.
+
+### Did the AI end_call without giving a price?
+
+→ Check whether end_call happened before the ZIP. Restart the conversation and start over from the ZIP.
+
+### Did the emergency outbound call not arrive?
+
+→ 1) Check whether the Vapi assistant `serverUrl` is `https://demo-navy-chi-47.vercel.app/api/vapi/tools`  2) Check whether the Vercel project is running  3) Check whether your emergency phone number +1 512 712 6713 can be reached during working hours
+
+### Is the Dashboard not showing the new calls?
+
+→ 1) Check /api/admin/llm-stats for LLM call records  2) Check the Supabase work_orders table  3) Check whether the webhook arrived (look at the Vercel logs)
 
 ---
 
-## 完整测试跑完后告诉我
+## Recording playback
 
-- 6 通电话的总分
-- 哪些剧本 AI 表现好
-- 哪些需要调 prompt
-- 紧急外呼是否真的打过来
-- 通话时长平均（vs 旧的 60-90 秒）
+The recording of every call is automatically saved to Supabase Storage. How to view it:
 
-我根据结果调 prompt 第二版（如果需要），然后就可以让 H-Master 真实测试了。
+1. Dashboard → click the work order row → open the detail page
+2. Query it directly: https://demo-navy-chi-47.vercel.app/orders/[id]
+
+---
+
+## Tell me when the full test run is done
+
+- The total score of the 6 calls
+- Which scripts the AI did well on
+- Which ones need the prompt tuned
+- Whether the emergency outbound call really came through
+- Average call duration (vs the old 60-90 seconds)
+
+I'll tune the prompt for version 2 based on the results (if needed), and then H-Master can do a real test.

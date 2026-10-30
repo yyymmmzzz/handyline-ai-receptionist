@@ -1,75 +1,75 @@
-# HandyLine AI MVP 计划 — 给初期合作客户使用
+# HandyLine AI MVP Plan — For Early Partner Customers
 
-**作者:** Mavis (mavis) · **日期:** 2026-08-26 · **状态:** 草稿 v0.1
-**目标客户:** H-Master Security Services（第一位）+ 接下来 3-5 家早期客户
-**时间窗:** 8-10 周到 GA（General Availability）
+**Author:** Mavis (mavis) · **Date:** 2026-08-26 · **Status:** Draft v0.1
+**Target customers:** H-Master Security Services (first) + the next 3-5 early customers
+**Time window:** 8-10 weeks to GA (General Availability)
 
 ---
 
-## 0. 现状盘点
+## 0. Current State Audit
 
-| 项 | 现状 | MVP 差距 |
+| Item | Current state | MVP gap |
 |---|---|---|
-| 数据库 | Supabase Postgres + 11 migrations | ✅ 够用 |
-| 业务层 | Vapi + Twilio + Next.js + Vercel | ✅ 够用 |
-| 多区域 | US + MY 路由 | ✅ 已支持 |
-| LLM 摘要 | gpt-4o-mini + 缓存 + 成本监控 | ✅ 够用 |
-| 客户数据 | 86 条（75 US + 11 MY demo） | ⚠️ demo 数据，不是真客户 |
-| 鉴权 | **完全没有** | ❌ 任何人都能看所有数据 |
-| 多租户 | DB 结构支持但代码不隔离 | ❌ 共享 dashboard |
-| 自助注册 | 无 | ❌ 销售人工配 |
-| 支付 / 计费 | 无 | ❌ 不知道收谁钱 |
-| 合规 | 无 Privacy Policy / ToS | ❌ 不能签客户合同 |
-| 监控 / 报警 | Vercel + Supabase 默认 | ⚠️ 无主动报警 |
-| 备份 | Supabase 自动 | ⚠️ 未验证 RPO/RTO |
-| 域名 | `demo-navy-chi-47.vercel.app` | ❌ 给客户看的不能是 vercel 子域 |
+| Database | Supabase Postgres + 11 migrations | ✅ Sufficient |
+| Service layer | Vapi + Twilio + Next.js + Vercel | ✅ Sufficient |
+| Multi-region | US + MY routing | ✅ Already supported |
+| LLM summary | gpt-4o-mini + caching + cost monitoring | ✅ Sufficient |
+| Customer data | 86 records (75 US + 11 MY demo) | ⚠️ demo data, not real customers |
+| Auth | **None at all** | ❌ Anyone can see all data |
+| Multi-tenancy | DB structure supports it but the code does not isolate | ❌ Shared dashboard |
+| Self-service signup | None | ❌ Sales configures it manually |
+| Payment / billing | None | ❌ No idea who to bill |
+| Compliance | No Privacy Policy / ToS | ❌ Cannot sign customer contracts |
+| Monitoring / alerting | Vercel + Supabase defaults | ⚠️ No proactive alerting |
+| Backups | Supabase automatic | ⚠️ RPO/RTO unverified |
+| Domain | `demo-navy-chi-47.vercel.app` | ❌ Customers cannot be shown a vercel subdomain |
 
 ---
 
-## 1. MVP 定义
+## 1. MVP Definition
 
-**For:** 1-5 个早期合作客户（已经 sales-led 谈下来）
+**For:** 1-5 early partner customers (already closed sales-led)
 **Do:**
-- 每个客户独立工作区（数据隔离）
-- 老板登录后看到自己的通话 + 录音 + 摘要
-- 我们（平台方）admin 后台看全局
-- 真实号码 + 真实语音 + 真实工单
-- 基本可靠性（99%+ uptime，重试有保障）
-- 基础合规（PDPA / CCPA / 录音告知）
+- A separate workspace per customer (data isolation)
+- The boss logs in and sees their own calls + recordings + summaries
+- We (the platform side) use an admin back office to see the global view
+- Real phone numbers + real voice + real work orders
+- Basic reliability (99%+ uptime, guaranteed retries)
+- Basic compliance (PDPA / CCPA / call-recording disclosure)
 
-**Don't (P0 不做):**
-- 自助注册
-- 自助配置（admin 帮客户配）
-- 支付系统（线下签合同 + 银行转账）
-- 多语种（先英文）
-- 多老板账号（每个客户 1 个老板）
-- 客户回访外呼
-- 移动 App
-- 自托管
+**Don't (P0 non-goals):**
+- Self-service signup
+- Self-service configuration (the admin configures it for the customer)
+- Payment system (sign contracts offline + bank transfer)
+- Multiple languages (English first)
+- Multiple boss accounts (1 boss per customer)
+- Customer follow-up outbound calls
+- Mobile App
+- Self-hosting
 
 ---
 
-## 2. 架构改动（demo → MVP）
+## 2. Architecture Changes (demo → MVP)
 
-### 2.1 鉴权层（全新）
+### 2.1 Auth Layer (brand new)
 
-**方案：Supabase Auth + 邮箱密码登录**
+**Approach: Supabase Auth + email/password login**
 
 ```
 src/app/
 ├── (auth)/
-│   ├── login/page.tsx           # 老板登录
-│   ├── reset/page.tsx           # 密码重置
+│   ├── login/page.tsx           # boss login
+│   ├── reset/page.tsx           # password reset
 │   └── layout.tsx
 ├── (admin)/
 │   ├── admin/
-│   │   ├── page.tsx              # 平台 dashboard
-│   │   ├── customers/page.tsx    # 客户列表
-│   │   ├── llm-stats/page.tsx    # LLM 成本
-│   │   └── vapi-spend/page.tsx   # Vapi 消费
+│   │   ├── page.tsx              # platform dashboard
+│   │   ├── customers/page.tsx    # customer list
+│   │   ├── llm-stats/page.tsx    # LLM cost
+│   │   └── vapi-spend/page.tsx   # Vapi spend
 │   └── layout.tsx
 ├── (boss)/
-│   ├── dashboard/                # 老板看自己的工单
+│   ├── dashboard/                # boss views their own work orders
 │   │   ├── page.tsx
 │   │   ├── orders/[id]/page.tsx
 │   │   └── recordings/page.tsx
@@ -79,31 +79,31 @@ src/app/
     └── ...
 ```
 
-**Supabase RLS 策略：**
-- `bosses`: 自己只能看自己 (`auth.uid() = owner_user_id`)
-- `work_orders`: 自己 boss_id 的单
-- `customers`: 自己 boss_id 的
-- `call_events`: 自己 boss_id 的
+**Supabase RLS policies:**
+- `bosses`: each one can only see their own (`auth.uid() = owner_user_id`)
+- `work_orders`: orders with their own boss_id
+- `customers`: those with their own boss_id
+- `call_events`: those with their own boss_id
 
-### 2.2 数据模型补充
+### 2.2 Data Model Additions
 
-需要新增的表：
+Tables to add:
 
 ```sql
--- 用户（老板账号）
+-- Users (boss accounts)
 CREATE TABLE users (
   id UUID PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
-  password_hash TEXT,            -- Supabase Auth 管
+  password_hash TEXT,            -- managed by Supabase Auth
   full_name TEXT,
-  boss_id UUID REFERENCES bosses(id),  -- 关联到 boss
+  boss_id UUID REFERENCES bosses(id),  -- linked to the boss
   role TEXT DEFAULT 'boss',      -- 'boss' | 'admin' | 'staff'
   phone TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 客户订阅（基础版）
+-- Customer subscription (basic plan)
 CREATE TABLE subscriptions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   boss_id UUID REFERENCES bosses(id) UNIQUE,
@@ -116,7 +116,7 @@ CREATE TABLE subscriptions (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 工单状态变更日志
+-- Work order status change log
 CREATE TABLE work_order_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   work_order_id UUID REFERENCES work_orders(id),
@@ -127,50 +127,50 @@ CREATE TABLE work_order_events (
 );
 ```
 
-### 2.3 业务流程改动
+### 2.3 Business Flow Changes
 
-**Onboarding（新客户）：**
-1. Sales 谈下来，签合同
-2. Admin 在 `/admin/customers` 创建客户
-   - 输入公司名、地址、营业时间、价格表、紧急规则
-   - 选 plan（trial / starter / pro）
-3. 系统自动：
-   - 创建 `users` 行 + 临时密码
-   - 创建 `subscriptions` 行
-   - 创建 `bosses` 行（已有逻辑）
-   - 通过 Vapi API 买 +60/+1 号码
-   - 通过 Vapi API 创建 assistant + 写 system prompt
-   - 绑 number → assistant
-   - 发送 welcome email 给老板
-4. Admin 验证：用一个测试电话打过去，确认 AI 接听正常
+**Onboarding (new customer):**
+1. Sales closes the deal and signs the contract
+2. Admin creates the customer at `/admin/customers`
+   - Enter company name, address, business hours, price list, emergency rules
+   - Choose a plan (trial / starter / pro)
+3. The system automatically:
+   - Creates a `users` row + a temporary password
+   - Creates a `subscriptions` row
+   - Creates a `bosses` row (existing logic)
+   - Buys a +60/+1 number through the Vapi API
+   - Creates the assistant + writes the system prompt through the Vapi API
+   - Binds number → assistant
+   - Sends a welcome email to the boss
+4. Admin verifies: call in with a test phone and confirm the AI answers properly
 
-**来电流转：**
-1. 客户拨 Vapi 号码
-2. Vapi 找到对应 assistant（每个客户一个）
-3. AI 用客户的 system prompt + 工具接听
-4. 工具调用走同一个 endpoint，但 `getBossByCountry` 改为 `getBossByVapiAssistantId`（更精确）
-5. 通话结束 → webhook → 写 work_order → 推送给老板
+**Inbound call routing:**
+1. The customer dials the Vapi number
+2. Vapi finds the matching assistant (one per customer)
+3. The AI answers using the customer's system prompt + tools
+4. Tool calls go through the same endpoint, but `getBossByCountry` becomes `getBossByVapiAssistantId` (more precise)
+5. Call ends → webhook → writes work_order → pushes to the boss
 
-**老板工作流：**
-1. 老板收到 push（SMS / WhatsApp / Email）
-2. 老板登录 `/dashboard` 看摘要
-3. 老板点 "确认" / "改时间" / "拒绝" / "回拨"
-4. 状态变更写 `work_order_events` + 推回 EMS（如已集成）
+**Boss workflow:**
+1. The boss receives a push (SMS / WhatsApp / Email)
+2. The boss logs into `/dashboard` to see the summary
+3. The boss taps "Confirm" / "Reschedule" / "Reject" / "Callback"
+4. Status changes are written to `work_order_events` + pushed back to EMS (if already integrated)
 
 ---
 
-## 3. UI/UX 改动
+## 3. UI/UX Changes
 
-### 3.1 当前 `/` → 拆为 3 个入口
+### 3.1 Split the current `/` into 3 entry points
 
-| 路径 | 谁 | 看到什么 |
+| Path | Who | What they see |
 |---|---|---|
-| `/login` | 老板 | 登录表单 |
-| `/dashboard` | 老板 | 自己的工单列表 + 录音 |
-| `/admin` | 平台方 | 全局 dashboard + 客户管理 + 成本监控 |
-| `/` | 公开 | redirect 到 `/login`（未登录）或 `/dashboard`（已登录） |
+| `/login` | Boss | Login form |
+| `/dashboard` | Boss | Their own work order list + recordings |
+| `/admin` | Platform side | Global dashboard + customer management + cost monitoring |
+| `/` | Public | Redirects to `/login` (not logged in) or `/dashboard` (logged in) |
 
-### 3.2 老板 dashboard 最小集
+### 3.2 Minimal boss dashboard
 
 ```
 ┌────────────────────────────────────┐
@@ -193,211 +193,211 @@ CREATE TABLE work_order_events (
 └────────────────────────────────────┘
 ```
 
-### 3.3 录音回放 + AI 摘要
+### 3.3 Recording playback + AI summary
 
-每个工单详情页：
-- 客户信息（phone, name, address）
-- 通话录音（HTML5 audio + 波形图）
-- AI 摘要（gpt-4o-mini 提取的 name/intent/tendency/follow-up）
-- 价格（trip fee + 范围 + 紧急度）
-- 老板操作：Confirm / Reschedule / Reject / Callback
-
----
-
-## 4. 实施分阶段（10 周）
-
-### Phase 1：基础设施（1 周）
-
-| # | 事项 | 时间 |
-|---|---|---|
-| 1.1 | 买域名 `handyline.bookloh.com`（如有） | 半天 |
-| 1.2 | Vercel custom domain + SSL | 1 小时 |
-| 1.3 | Sentry 集成（错误监控） | 2 小时 |
-| 1.4 | Better Uptime / Instatus（uptime 监控） | 1 小时 |
-| 1.5 | Privacy Policy + Terms of Service 页面 | 1 天 |
-| 1.6 | Supabase backup 验证 + 文档 | 半天 |
-
-**里程碑：** 域名上线 + 监控可观察
-
-### Phase 2：鉴权 + 客户隔离（1.5 周）
-
-| # | 事项 | 时间 |
-|---|---|---|
-| 2.1 | Supabase Auth + 邮箱密码登录 | 1 天 |
-| 2.2 | `users` 表 + migration 012 | 半天 |
-| 2.3 | RLS 策略 on all tables | 1 天 |
-| 2.4 | 登录 / 登出 / 密码重置 UI | 1 天 |
-| 2.5 | 老板 `/dashboard` 路由（只显示自己的） | 1 天 |
-| 2.6 | Admin `/admin` 路由（看所有） | 1 天 |
-| 2.7 | Session 持久化 + 错误处理 | 半天 |
-
-**里程碑：** 老板能登录看到自己的工单
-
-### Phase 3：Vapi 自动化（1.5 周）
-
-| # | 事项 | 时间 |
-|---|---|---|
-| 3.1 | `scripts/provision-customer.js`：API 买号 + 建 assistant + 绑号 | 1 天 |
-| 3.2 | 修改 webhook 路由：`getBossByVapiAssistantId` 替代 `getBossByCountry` | 半天 |
-| 3.3 | Tool endpoint 验证按 assistant 隔离 | 半天 |
-| 3.4 | 自动录音上传 + 永久存储（已有，验证） | 半天 |
-| 3.5 | 失败重试 + 死信队列 | 1 天 |
-| 3.6 | 客户 onboarding 后台表单 | 1 天 |
-
-**里程碑：** Admin 在后台填表，10 分钟后客户号码可用
-
-### Phase 4：生产打磨（1.5 周）
-
-| # | 事项 | 时间 |
-|---|---|---|
-| 4.1 | LLM 摘要 prompt 优化（多场景） | 1 天 |
-| 4.2 | 工单状态机（accepted/confirmed/in_progress/completed/cancelled） | 1 天 |
-| 4.3 | 老板操作 UI（确认 / 改时间 / 拒绝 / 回拨） | 1 天 |
-| 4.4 | SMS / Email 推送集成（Twilio + Resend） | 1 天 |
-| 4.5 | 录音播放器 + 波形图 | 半天 |
-| 4.6 | 错误页面 + 加载状态 + 空状态 | 半天 |
-| 4.7 | 客户支持邮箱 + WhatsApp Business 集成 | 半天 |
-
-**里程碑：** 端到端可用
-
-### Phase 5：H-Master go-live（1 周）
-
-| # | 事项 | 时间 |
-|---|---|---|
-| 5.1 | 收齐 H-Master 真实资料（已有 checklist） | 等你 |
-| 5.2 | 录 H-Master 老板语音 | 你 |
-| 5.3 | 通过后台为 H-Master 创建账号 | 我 |
-| 5.4 | 10 个测试剧本走通 | 一起 |
-| 5.5 | 调优 prompt + 定价 | 我 |
-| 5.6 | 真实电话号码开通 | 半天 |
-| 5.7 | 老板培训（30 分钟远程视频） | 半天 |
-| 5.8 | 上线观察 1 周 | 持续 |
-
-**里程碑：** H-Master 老板用上 AI 接待员
-
-### Phase 6：第 2-3 个客户（持续）
-
-复制 H-Master 流程。每加一个客户 ~1 天。
+On each work order detail page:
+- Customer info (phone, name, address)
+- Call recording (HTML5 audio + waveform)
+- AI summary (name/intent/tendency/follow-up extracted by gpt-4o-mini)
+- Price (trip fee + scope + urgency)
+- Boss actions: Confirm / Reschedule / Reject / Callback
 
 ---
 
-## 5. 资源 & 成本估算
+## 4. Phased Implementation (10 weeks)
 
-### 5.1 人力
+### Phase 1: Infrastructure (1 week)
 
-| 角色 | 投入 |
+| # | Item | Time |
+|---|---|---|
+| 1.1 | Buy the domain `handyline.bookloh.com` (if available) | Half a day |
+| 1.2 | Vercel custom domain + SSL | 1 hour |
+| 1.3 | Sentry integration (error monitoring) | 2 hours |
+| 1.4 | Better Uptime / Instatus (uptime monitoring) | 1 hour |
+| 1.5 | Privacy Policy + Terms of Service pages | 1 day |
+| 1.6 | Supabase backup verification + documentation | Half a day |
+
+**Milestone:** Domain live + monitoring observable
+
+### Phase 2: Auth + Customer Isolation (1.5 weeks)
+
+| # | Item | Time |
+|---|---|---|
+| 2.1 | Supabase Auth + email/password login | 1 day |
+| 2.2 | `users` table + migration 012 | Half a day |
+| 2.3 | RLS policies on all tables | 1 day |
+| 2.4 | Login / logout / password reset UI | 1 day |
+| 2.5 | Boss `/dashboard` route (shows only their own) | 1 day |
+| 2.6 | Admin `/admin` route (sees everything) | 1 day |
+| 2.7 | Session persistence + error handling | Half a day |
+
+**Milestone:** The boss can log in and see their own work orders
+
+### Phase 3: Vapi Automation (1.5 weeks)
+
+| # | Item | Time |
+|---|---|---|
+| 3.1 | `scripts/provision-customer.js`: API number purchase + assistant creation + number binding | 1 day |
+| 3.2 | Modify the webhook route: `getBossByVapiAssistantId` replaces `getBossByCountry` | Half a day |
+| 3.3 | Verify tool endpoint isolation by assistant | Half a day |
+| 3.4 | Automatic recording upload + permanent storage (exists, verify) | Half a day |
+| 3.5 | Failure retry + dead-letter queue | 1 day |
+| 3.6 | Customer onboarding back office form | 1 day |
+
+**Milestone:** The admin fills in the back office form, and 10 minutes later the customer's number is usable
+
+### Phase 4: Production Polish (1.5 weeks)
+
+| # | Item | Time |
+|---|---|---|
+| 4.1 | LLM summary prompt optimization (multiple scenarios) | 1 day |
+| 4.2 | Work order state machine (accepted/confirmed/in_progress/completed/cancelled) | 1 day |
+| 4.3 | Boss action UI (Confirm / Reschedule / Reject / Callback) | 1 day |
+| 4.4 | SMS / Email push integration (Twilio + Resend) | 1 day |
+| 4.5 | Recording player + waveform | Half a day |
+| 4.6 | Error pages + loading states + empty states | Half a day |
+| 4.7 | Customer support email + WhatsApp Business integration | Half a day |
+
+**Milestone:** End to end usable
+
+### Phase 5: H-Master Go-Live (1 week)
+
+| # | Item | Time |
+|---|---|---|
+| 5.1 | Collect all of H-Master's real information (checklist already exists) | Waiting on you |
+| 5.2 | Record the H-Master boss's voice | You |
+| 5.3 | Create the H-Master account through the back office | Me |
+| 5.4 | Get 10 test scripts working end to end | Together |
+| 5.5 | Tune the prompt + pricing | Me |
+| 5.6 | Provision the real phone number | Half a day |
+| 5.7 | Boss training (30-minute remote video call) | Half a day |
+| 5.8 | Observe for 1 week after go-live | Ongoing |
+
+**Milestone:** The H-Master boss is using the AI receptionist
+
+### Phase 6: Customers 2-3 (ongoing)
+
+Repeat the H-Master process. Each additional customer takes ~1 day.
+
+---
+
+## 5. Resources & Cost Estimate
+
+### 5.1 Manpower
+
+| Role | Effort |
 |---|---|
-| 全栈开发（你 + 我） | 10 周集中 |
-| 销售（你） | 持续 |
-| 客户成功（你） | 持续 |
+| Full-stack development (you + me) | 10 weeks focused |
+| Sales (you) | Ongoing |
+| Customer success (you) | Ongoing |
 
-### 5.2 月度运营成本（按 5 个客户估算）
+### 5.2 Monthly Operating Cost (estimated for 5 customers)
 
-| 项 | 单价 | 月用量 | 月成本 |
+| Item | Unit price | Monthly usage | Monthly cost |
 |---|---|---|---|
-| Vapi 号码（5 个） | $1.50/月 | 5 | $7.50 |
-| Vapi 通话 | $0.05/分钟 | 500 分钟 | $25 |
-| OpenAI（LLM 摘要） | $0.001/通 | 500 通 | $0.50 |
-| ElevenLabs（语音 clone） | $5/月/voice | 5 | $25 |
-| Twilio SMS | $0.05/条 | 200 | $10 |
-| Supabase | $25/月（Pro） | 1 | $25 |
-| Vercel | $20/月（Pro） | 1 | $20 |
-| Sentry | $0（free tier） | - | $0 |
-| Domain | $15/年 | 1 | $1.25 |
-| **小计** | | | **~$114/月** |
+| Vapi numbers (5) | $1.50/month | 5 | $7.50 |
+| Vapi calls | $0.05/minute | 500 minutes | $25 |
+| OpenAI (LLM summary) | $0.001/call | 500 calls | $0.50 |
+| ElevenLabs (voice clone) | $5/month/voice | 5 | $25 |
+| Twilio SMS | $0.05/message | 200 | $10 |
+| Supabase | $25/month (Pro) | 1 | $25 |
+| Vercel | $20/month (Pro) | 1 | $20 |
+| Sentry | $0 (free tier) | - | $0 |
+| Domain | $15/year | 1 | $1.25 |
+| **Subtotal** | | | **~$114/month** |
 
-按 5 客户 / 月 500 通电话 = **每通 $0.23**。客单价至少 $30/月才能盈亏平衡。
+At 5 customers / 500 calls per month = **$0.23 per call**. The price per customer must be at least $30/month to break even.
 
-### 5.3 一次性成本
+### 5.3 One-time Costs
 
-| 项 | 成本 |
+| Item | Cost |
 |---|---|
-| 域名（首年） | $15 |
-| 设计 / logo | 自有（零） |
-| 法律 / Privacy Policy | 自有模板（零）或律师 $500-1000 |
-| Vapi 初始 credit | $5 |
+| Domain (first year) | $15 |
+| Design / logo | In-house (zero) |
+| Legal / Privacy Policy | In-house template (zero) or lawyer $500-1000 |
+| Vapi initial credit | $5 |
 
 ---
 
-## 6. 定价模型（建议）
+## 6. Pricing Model (proposal)
 
-| Plan | 月费 | 通话额度 | 超出 | 目标客户 |
+| Plan | Monthly fee | Call allowance | Overage | Target customer |
 |---|---|---|---|---|
-| Trial | 免费 14 天 | 50 通 | 停 | 评估期 |
-| Starter | $99/月 | 200 通 | $0.50/通 | 1-3 人小队 |
-| Pro | $299/月 | 1000 通 | $0.30/通 | 5-10 人团队 |
-| Enterprise | 议价 | 议价 | - | 大型 |
+| Trial | Free for 14 days | 50 calls | Cut off | Evaluation period |
+| Starter | $99/month | 200 calls | $0.50/call | Teams of 1-3 people |
+| Pro | $299/month | 1000 calls | $0.30/call | Teams of 5-10 people |
+| Enterprise | Negotiated | Negotiated | - | Large |
 
-参考：
-- US 市场 receptionist 工资 $2700/月
-- 我们 $99-299 = 工资的 4-11%
-- 即使只有 1/10 客户选 Pro 也能 cover 成本
+Reference:
+- US market receptionist salary $2700/month
+- Our $99-299 = 4-11% of the salary
+- Even if only 1/10 of customers pick Pro, it covers the costs
 
 ---
 
-## 7. 风险 & 决策点
+## 7. Risks & Decision Points
 
-### 7.1 关键决策（需要你拍板）
+### 7.1 Key Decisions (need your call)
 
-| 决策 | 选项 | 我的建议 |
+| Decision | Options | My recommendation |
 |---|---|---|
-| 域名 | handyline.bookloh.com / handyline.ai / 其他 | handyline.ai（如可用） |
-| 鉴权方案 | Supabase Auth（推荐）/ Clerk / NextAuth | Supabase Auth（最少新依赖） |
-| 支付方案 | Stripe / iPay88 / 银行转账手动 | 先线下，3 客户后再上 Stripe |
-| 数据存储地区 | Supabase Singapore / US | Singapore（SEA 客户） |
-| 自助 vs 销售 | 销售-led / 自助 / 混合 | 销售-led（5 客户以内） |
+| Domain | handyline.bookloh.com / handyline.ai / Other | handyline.ai (if available) |
+| Auth approach | Supabase Auth (recommended) / Clerk / NextAuth | Supabase Auth (fewest new dependencies) |
+| Payment approach | Stripe / iPay88 / Manual bank transfer | Offline first, Stripe after 3 customers |
+| Data storage region | Supabase Singapore / US | Singapore (SEA customers) |
+| Self-service vs sales | Sales-led / Self-service / Hybrid | Sales-led (up to 5 customers) |
 
-### 7.2 风险
+### 7.2 Risks
 
-| 风险 | 概率 | 影响 | 缓解 |
+| Risk | Probability | Impact | Mitigation |
 |---|---|---|---|
-| 客户通话质量差（STT 误识别） | 中 | 高 | 多测试 + 老板旁听第一周 |
-| Vapi 号码申请被拒（MY 监管） | 中 | 高 | 同时申请多个运营商备份 |
-| 客户 PDPA 投诉 | 低 | 中 | 录音告知 + 30 天自动删 + 快速响应 |
-| 通话成本失控 | 低 | 中 | LLM 缓存 + 通话时长限制 + 月度 cap |
-| H-Master 单家 churn | 中 | 高 | 月度 review + 持续优化 prompt |
+| Poor call quality for customers (STT misrecognition) | Medium | High | More testing + the boss listens in during week 1 |
+| Vapi number application rejected (MY regulation) | Medium | High | Apply to multiple carriers in parallel as backup |
+| Customer PDPA complaint | Low | Medium | Recording disclosure + auto-delete after 30 days + fast response |
+| Call costs out of control | Low | Medium | LLM caching + call duration limit + monthly cap |
+| H-Master churn (single account) | Medium | High | Monthly review + continuous prompt optimization |
 
 ---
 
-## 8. 第一周具体动作（这周就要做的）
+## 8. Week 1 Concrete Actions (to be done this week)
 
-| Day | 动作 |
+| Day | Action |
 |---|---|
-| Day 1 (今天) | 确认域名 + 决定鉴权方案 + 注册 Sentry 账号 |
-| Day 2 | Migration 012: `users` + `subscriptions` + `work_order_events` 表 |
-| Day 3 | 鉴权基础：Supabase Auth + 登录页 + RLS 第一版 |
-| Day 4 | 老板 dashboard 路由（v1，简化版） |
-| Day 5 | 部署到 `handyline.bookloh.com` 域名 + Sentry 集成 + 跑通内部测试 |
+| Day 1 (today) | Confirm the domain + decide the auth approach + sign up for a Sentry account |
+| Day 2 | Migration 012: `users` + `subscriptions` + `work_order_events` tables |
+| Day 3 | Auth foundation: Supabase Auth + login page + first version of the RLS policies |
+| Day 4 | Boss dashboard route (v1, simplified) |
+| Day 5 | Deploy to the `handyline.bookloh.com` domain + Sentry integration + get the internal test working |
 
-**周末：** 内部用户（你自己）走一遍 H-Master onboarding 流程，模拟真实使用。
+**Weekend:** An internal user (you) walks through the H-Master onboarding flow to simulate real usage.
 
 ---
 
-## 9. 10 周后的样子
+## 9. What It Looks Like After 10 Weeks
 
-| 维度 | 现在 | MVP 完成后 |
+| Dimension | Now | After the MVP |
 |---|---|---|
-| 客户数 | 1（H-Master，等开通） | 3-5 家 |
-| 鉴权 | 无 | Supabase Auth + RLS |
-| 域名 | vercel.app 子域 | 自定义域名 + SSL |
-| 老板登录 | 不可能 | 看自己工单 + 录音 + 操作 |
-| Admin 后台 | 简单 dashboard | 客户管理 + 成本监控 + 通话统计 |
-| 支付 | 无 | 线下合同 + 银行转账 |
-| 监控 | Vercel 默认 | Sentry + Uptime + 自定义 alert |
-| 合规 | 无 | Privacy Policy + ToS + PDPA |
-| 可靠性 | 默认 | 99% uptime + 重试 + 备份验证 |
-| 文档 | SETUP.md | DEPLOYMENT.md + ONBOARDING.md + API.md |
+| Number of customers | 1 (H-Master, waiting to be provisioned) | 3-5 |
+| Auth | None | Supabase Auth + RLS |
+| Domain | vercel.app subdomain | Custom domain + SSL |
+| Boss login | Impossible | See their own work orders + recordings + take action |
+| Admin back office | Simple dashboard | Customer management + cost monitoring + call statistics |
+| Payments | None | Offline contract + bank transfer |
+| Monitoring | Vercel default | Sentry + Uptime + custom alerts |
+| Compliance | None | Privacy Policy + ToS + PDPA |
+| Reliability | Default | 99% uptime + retries + backup verification |
+| Docs | SETUP.md | DEPLOYMENT.md + ONBOARDING.md + API.md |
 
 ---
 
-## 10. 开放问题（需要你定）
+## 10. Open Questions (Need Your Decision)
 
-1. **域名用哪个？** handyline.ai / handyline.bookloh.com / 其他？
-2. **鉴权方案确认：** Supabase Auth OK 吗？还是要 Clerk / 自建？
-3. **数据存储地区：** Supabase Singapore 还是 US？H-Master 在 Sarawak 选 SG 区域更合规。
-4. **计费方式：** 真的先线下 / 还是要上 Stripe？
-5. **Trial 政策：** 给 H-Master 多长时间 trial？收不收押金？
-6. **定价模型：** 上面 4 档 plan 可以接受吗？$99 starter 起步？
+1. **Which domain to use?** handyline.ai / handyline.bookloh.com / Other?
+2. **Auth approach confirmed:** Is Supabase Auth OK, or do you want Clerk / self-built?
+3. **Data storage region:** Supabase Singapore or US? H-Master is in Sarawak, so the SG region is more compliant.
+4. **Billing method:** Really start offline, or do you want Stripe?
+5. **Trial policy:** How long a trial for H-Master? Is a deposit charged?
+6. **Pricing model:** Are the 4 plans above acceptable? Starting at $99 for starter?
 
-**这些不定下来，10 周计划没法开始。** 拍板后我开 Phase 1。
+**Without these decisions, the 10-week plan cannot start.** Once you decide, I will start Phase 1.
 

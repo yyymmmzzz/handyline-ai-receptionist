@@ -78,7 +78,7 @@ AI: [end_call immediately]
 ### 1.4 Give price early + with range
 
 **Before:** AI gives price only after collecting all info
-**After:** Once ZIP is verified, immediately: "Trip $89 + [trade] $XXX-XXX. Total大概 $YYY-ZZZ."
+**After:** Once ZIP is verified, immediately: "Trip $89 + [trade] $XXX-XXX. Total roughly $YYY-ZZZ."
 
 **Why:** Customers' top 3 questions are "Can you come / how much / how fast". If they don't hear a price in first 30 seconds, anxiety sets in.
 

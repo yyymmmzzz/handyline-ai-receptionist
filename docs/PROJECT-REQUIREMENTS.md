@@ -177,7 +177,7 @@ productized surface of Bookloh's contractor operations stack.
 
 - AI cost per call: ~$0.10 (Vapi + GPT-4o-mini + ElevenLabs).
 - Pricing to contractor (v1 plan): $X / month per phone number + per-call
-  overage (see business plan `HandyLine AI 商业计划书_v0.3.pptx`).
+  overage (see business plan `HandyLine AI Business Plan_v0.3.pptx`).
 
 ---
 

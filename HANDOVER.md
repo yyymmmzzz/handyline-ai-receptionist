@@ -1,228 +1,228 @@
-# HandyLine AI Receptionist — 完整工程交接包
+# HandyLine AI Receptionist — Complete Engineering Handover Package
 
-> 给接手开发团队的快读指南。请先通读 README.md + SETUP.md + docs/MVP-PLAN.md，
-> 再按本文件的"上手顺序"操作。
+> A quick-read guide for the incoming development team. Read README.md + SETUP.md + docs/MVP-PLAN.md first,
+> then work through the "onboarding order" in this document.
 
-**交接日期**：2026-09-24
-**打包者**：Mimatt（产品 + 运营） / 工程会话 Mavis
-**版本**：截至 `2a8253e` 提交
-
----
-
-## 1. 这个项目是什么
-
-HandyLine AI 是面向北美 / 东南亚家庭服务承包商的 **AI 电话接待员**：
-
-- **核心场景**：客户拨打承包商电话 → Vapi（语音）→ GPT-4o-mini 接待 → AI 决定接收 / 拒绝 / 转人工 / 紧急升级
-- **数据**：订单 / 工单写入 Supabase，Dashboard 可视化
-- **多区域**：1 个 Vapi assistant = 1 个 Boss（承包商） = 1 个 Supabase boss row
-- **生产客户**：US Alex / Handy Works（已上线），MY H-Master Security（placeholder assistant）
+**Handover date**: 2026-09-24
+**Packaged by**: Mimatt (Product + Operations) / Engineering session Mavis
+**Version**: as of commit `2a8253e`
 
 ---
 
-## 2. 接手后第一周该做什么（按优先级）
+## 1. What this project is
 
-### 第 1 天：让本地能跑起来
+HandyLine AI is an **AI phone receptionist** for home services contractors in North America / Southeast Asia:
+
+- **Core flow**: customer calls the contractor's phone → Vapi (voice) → GPT-4o-mini handles the call → AI decides to accept / decline / hand off to a human / escalate as an emergency
+- **Data**: orders / work orders are written to Supabase and visualized in the Dashboard
+- **Multi-region**: 1 Vapi assistant = 1 Boss (contractor) = 1 Supabase boss row
+- **Production customers**: US Alex / Handy Works (live), MY H-Master Security (placeholder assistant)
+
+---
+
+## 2. What to do in the first week after taking over (by priority)
+
+### Day 1: Get it running locally
 
 ```bash
-# 1) 解压到任意目录，进入项目根
+# 1) Unzip into any directory and cd into the project root
 cd handyline-ai-receptionist
 
-# 2) 安装依赖
-npm install    # node_modules 已排除在 zip 外
+# 2) Install dependencies
+npm install    # node_modules is excluded from the zip
 
-# 3) .env.local 已经在 zip 里，直接用。如果想换 secrets，复制 .env.example 改
+# 3) .env.local is already in the zip — use it as is. To swap the secrets, copy .env.example and edit it
 
-# 4) 拉数据库 migrations 到 Supabase 项目（用 supabase CLI）
+# 4) Pull the database migrations into the Supabase project (using the supabase CLI)
 supabase link --project-ref <your-project-ref>     # cggqxaxunqxsgurgmiqh
-supabase db push                                  # 应用所有 migrations/
+supabase db push                                  # apply all of migrations/
 
-# 5) 启动
+# 5) Start it
 npm run dev
-# 访问 http://localhost:3000
+# Go to http://localhost:3000
 ```
 
-### 第 2 天：理解架构
+### Day 2: Understand the architecture
 
-必读（按顺序）：
-1. **README.md** — 项目概览
-2. **SETUP.md** — Vercel + Supabase + Vapi + Twilio 全栈配置
-3. **docs/MVP-PLAN.md** — 整体产品规划
-4. **docs/MULTI-REGION-ARCHITECTURE.md** — 多区域数据模型（核心）
-5. **src/lib/types.ts** — Boss / WorkOrder 等数据模型
-6. **src/lib/order.ts** — `getBossByVapiAssistantId()` / `getBossByCountry()` 是 routing 核心
-7. **src/app/api/vapi/tools/route.ts** — AI 工具调用的实际后端
-8. **src/app/api/vapi/webhook/route.ts** — Vapi 通话结束 webhook
+Must read (in order):
+1. **README.md** — project overview
+2. **SETUP.md** — full-stack configuration for Vercel + Supabase + Vapi + Twilio
+3. **docs/MVP-PLAN.md** — overall product plan
+4. **docs/MULTI-REGION-ARCHITECTURE.md** — multi-region data model (core)
+5. **src/lib/types.ts** — data models such as Boss / WorkOrder
+6. **src/lib/order.ts** — `getBossByVapiAssistantId()` / `getBossByCountry()` are the core of routing
+7. **src/app/api/vapi/tools/route.ts** — the actual backend for AI tool calls
+8. **src/app/api/vapi/webhook/route.ts** — the Vapi end-of-call webhook
 
-### 第 3 天：跑测试脚本验证环境
+### Day 3: Run the test scripts to verify the environment
 
 ```bash
-# 配置静态校验 — 不需要外部网络，34 项检查
+# Static config validation — no external network needed, 34 checks
 node scripts/test-static-config.js
 
-# Vapi 配置实时校验（会读 .env.local 和调 Vapi API）
+# Live Vapi config validation (reads .env.local and calls the Vapi API)
 node scripts/test-static-config.js --live
 
-# 拉历史通话到 work_orders（默认 dry-run，先看输出再 --write）
-node scripts/import-vapi-calls.js                  # 只多区域
+# Import historical calls into work_orders (dry-run by default, check the output before using --write)
+node scripts/import-vapi-calls.js                  # multi-region only
 node scripts/import-vapi-calls.js --regions us --write
 node scripts/import-vapi-calls.js --regions my --write
 ```
 
 ---
 
-## 3. 关键技术决策（不要随便动）
+## 3. Key technical decisions (don't change them casually)
 
-| # | 决策 | 为什么 | 在哪里 |
+| # | Decision | Why | Where |
 |---|------|--------|--------|
-| 1 | 1 Boss = 1 Vapi Assistant = 1 Phone Number | 简化多租户；避免 assistant 串号 | `src/lib/order.ts` `getBossByVapiAssistantId()` |
-| 2 | 路由按 Vapi assistantId（不是 phone number） | Country code 可能重复；assistantId 唯一 | `src/app/api/vapi/tools/route.ts` |
-| 3 | gpt-4o-mini + eleven_turbo_v2_5 | 成本 vs 质量平衡 | `vapi/assistant.json` |
-| 4 | TTS 数字必须拼读（"seven one three ..."） | ElevenLabs 朗读数字不稳 | `vapi/system-prompt.md` |
-| 5 | 关闭电话前必须问"Anything else?" | 用户体验 | system prompt |
-| 6 | 录音 + 转写 + 价格预览必须先存 Supabase Storage | Vapi presigned URL 30min 过期 | `scripts/import-vapi-calls.js` |
-| 7 | SEA 范围：先只做 MY | 资源聚焦 | `docs/SEA-MARKET-TECH-STACK.md` |
+| 1 | 1 Boss = 1 Vapi Assistant = 1 Phone Number | Simplifies multi-tenancy; avoids assistant cross-contamination | `src/lib/order.ts` `getBossByVapiAssistantId()` |
+| 2 | Routing by Vapi assistantId (not phone number) | Country codes can repeat; assistantId is unique | `src/app/api/vapi/tools/route.ts` |
+| 3 | gpt-4o-mini + eleven_turbo_v2_5 | Cost vs quality balance | `vapi/assistant.json` |
+| 4 | TTS digits must be spelled out ("seven one three ...") | ElevenLabs reads digits unreliably | `vapi/system-prompt.md` |
+| 5 | Must ask "Anything else?" before ending the call | User experience | system prompt |
+| 6 | Recording + transcript + price preview must be stored in Supabase Storage first | Vapi presigned URL expires after 30min | `scripts/import-vapi-calls.js` |
+| 7 | SEA scope: start with MY only | Focus resources | `docs/SEA-MARKET-TECH-STACK.md` |
 
 ---
 
-## 4. 包内目录速查
+## 4. Quick directory map of the package
 
 ```
 handyline-ai-receptionist/
-├── .env.local                    ⚠ 含所有 secrets，直接用
-├── .env.example                  占位 schema
-├── README.md / SETUP.md          上手 + 部署
-├── HANDOVER.md                   ← 你正在读
+├── .env.local                    ⚠ contains all secrets, use it as is
+├── .env.example                  placeholder schema
+├── README.md / SETUP.md          onboarding + deployment
+├── HANDOVER.md                   ← you are reading this
 ├── package.json / package-lock.json
 ├── next.config.js / tailwind.config.ts / tsconfig.json
 ├── src/                          ← Next.js App Router
-│   ├── app/                      路由 + page.tsx + api/
+│   ├── app/                      routing + page.tsx + api/
 │   │   ├── api/
-│   │   │   ├── vapi/             Vapi webhook + tools（核心）
-│   │   │   ├── twilio/           Twilio 紧急路由
-│   │   │   ├── cron/             定时任务（emergency retry）
+│   │   │   ├── vapi/             Vapi webhook + tools (core)
+│   │   │   ├── twilio/           Twilio emergency routing
+│   │   │   ├── cron/             scheduled jobs (emergency retry)
 │   │   │   ├── boss/             Boss callback
-│   │   │   ├── dev/              开发种子 / 模拟通话（生产可关）
-│   │   │   ├── admin/            管理 API（reclassify / llm-stats）
-│   │   │   ├── v1/               v1 API（assistants / singlish-eval）
-│   │   │   └── human-handoff-demo/  AI→人工桥接 demo
-│   │   ├── orders/[id]/          工单详情
-│   │   ├── preview/              客户预览链接
-│   │   ├── human-handoff-demo/   AI→人工 demo UI
-│   │   ├── landing/              营销 landing
-│   │   └── config/               Boss 配置面板
-│   ├── components/ui/            shadcn/ui 基础组件
-│   └── lib/                      ← 业务核心
-│       ├── order.ts              Boss routing + 订单处理
-│       ├── validation.ts         服务范围验证（按 country）
-│       ├── call-summary.ts       转写摘要（regex 回退）
-│       ├── openai-summarize.ts   LLM 摘要（首选）
-│       ├── vapi-event-handler.ts Vapi 事件分发
-│       ├── emergency-call.ts     紧急通话重试
-│       ├── types.ts              数据库类型
+│   │   │   ├── dev/              dev seed / simulated calls (can be turned off in production)
+│   │   │   ├── admin/            admin APIs (reclassify / llm-stats)
+│   │   │   ├── v1/               v1 APIs (assistants / singlish-eval)
+│   │   │   └── human-handoff-demo/  AI→human handoff demo
+│   │   ├── orders/[id]/          work order detail
+│   │   ├── preview/              customer preview link
+│   │   ├── human-handoff-demo/   AI→human demo UI
+│   │   ├── landing/              marketing landing
+│   │   └── config/               Boss config panel
+│   ├── components/ui/            shadcn/ui base components
+│   └── lib/                      ← business core
+│       ├── order.ts              Boss routing + order processing
+│       ├── validation.ts         service area validation (by country)
+│       ├── call-summary.ts       transcript summary (regex fallback)
+│       ├── openai-summarize.ts   LLM summary (preferred)
+│       ├── vapi-event-handler.ts Vapi event dispatch
+│       ├── emergency-call.ts     emergency call retry
+│       ├── types.ts              database types
 │       └── ...
-├── scripts/                      ← 运维脚本（生产可直接 cron 跑）
-│   ├── import-vapi-calls.js      真实电话同步 → work_orders（多域 + dry-run）
-│   ├── import-vapi-webcalls.js   含 webCall dashboard 测试
-│   ├── create-vapi-assistant*.js  新建 Vapi assistant
-│   ├── update-vapi-assistant*.js 更新 Vapi assistant + system prompt
-│   ├── test-static-config.js     34 项静态校验（必跑）
-│   ├── test-conversations.js     24 个对话场景 LLM 行为测试
-│   ├── analyze-calls.js          历史通话只读分析
+├── scripts/                      ← ops scripts (can be run by cron directly in production)
+│   ├── import-vapi-calls.js      real call sync → work_orders (multi-domain + dry-run)
+│   ├── import-vapi-webcalls.js   includes webCall dashboard testing
+│   ├── create-vapi-assistant*.js  create a Vapi assistant
+│   ├── update-vapi-assistant*.js update a Vapi assistant + system prompt
+│   ├── test-static-config.js     34 static checks (must run)
+│   ├── test-conversations.js     LLM behavior tests for 24 conversation scenarios
+│   ├── analyze-calls.js          read-only analysis of historical calls
 │   ├── seed-demo-data.js / seed-my-demo-data.js
-│   ├── clear-test-data.js        清空开发种子
-│   ├── vercel-env-push.sh        一键 push env 到 Vercel
-│   └── lib/call-summary.js       JS 端口 call-summary
+│   ├── clear-test-data.js        clear the dev seed data
+│   ├── vercel-env-push.sh        one-click push of env to Vercel
+│   └── lib/call-summary.js       JS port of call-summary
 ├── supabase/
-│   ├── schema.sql                全 schema（参考）
-│   ├── migrations/               11 个有序迁移（按编号顺序执行）
-│   └── config.toml               supabase CLI 配置
+│   ├── schema.sql                full schema (reference)
+│   ├── migrations/               11 ordered migrations (execute in number order)
+│   └── config.toml               supabase CLI config
 ├── vapi/
-│   ├── assistant.json            US Alex 当前配置
+│   ├── assistant.json            current US Alex config
 │   ├── assistant-my.json         MY H-Master placeholder
-│   ├── assistant-sg.json         SG（空）
-│   ├── system-prompt.md          US Alex system prompt（5767 字符）
+│   ├── assistant-sg.json         SG (empty)
+│   ├── system-prompt.md          US Alex system prompt (5767 characters)
 │   ├── system-prompt-my.md       MY prompt
 │   └── system-prompt-sg.md       SG prompt
-├── docs/                         ← 11 个设计文档（按文件名读）
-└── public/                       静态资源
+├── docs/                         ← 11 design documents (read them by file name)
+└── public/                       static assets
 ```
 
 ---
 
-## 5. .env.local 包含的 secrets（26 项）
+## 5. Secrets contained in .env.local (26 items)
 
-打包时按用户要求**全部带入**，请接手团队：
+All of them were brought over at packaging time, as the user requested. For the incoming team:
 
-- Vercel 收到包后**第一时间**改成自己管理的 secrets
-- 不要上传到 GitHub / Notion / Slack 公开频道
-- 处理完交接后**销毁本地 zip + 改所有 key**
+- As soon as Vercel receives the package, **immediately** switch to secrets you manage yourself
+- Do not upload them to GitHub / Notion / public Slack channels
+- After the handover is done, **destroy the local zip and rotate all keys**
 
 ```
-VAPI_API_KEY                          # Vapi 主账号
+VAPI_API_KEY                          # main Vapi account
 VAPI_ASSISTANT_ID                     # US Alex
-VAPI_EMERGENCY_ASSISTANT_ID           # US 紧急升级
+VAPI_EMERGENCY_ASSISTANT_ID           # US emergency escalation
 VAPI_MY_ASSISTANT_ID                  # MY H-Master
-VAPI_SG_ASSISTANT_ID                  # SG（空，待启用）
-VAPI_ID_ASSISTANT_ID                  # ID（空，待启用）
-VAPI_PHONE_NUMBER_ID                  # Vapi 电话号码记录
+VAPI_SG_ASSISTANT_ID                  # SG (empty, not enabled yet)
+VAPI_ID_ASSISTANT_ID                  # ID (empty, not enabled yet)
+VAPI_PHONE_NUMBER_ID                  # Vapi phone number record
 
-NEXT_PUBLIC_VAPI_PUBLIC_KEY           # 客户端公开 key
-ELEVENLABS_CREDENTIAL_ID              # TTS 凭据
-ELEVENLABS_VOICE_ID                   # TTS 声音 ID
+NEXT_PUBLIC_VAPI_PUBLIC_KEY           # client-side public key
+ELEVENLABS_CREDENTIAL_ID              # TTS credential
+ELEVENLABS_VOICE_ID                   # TTS voice ID
 
-SUPABASE_ACCESS_TOKEN                 # supabase CLI 用
-SUPABASE_DB_PASSWORD                  # 直连 DB 密码
-SUPABASE_SERVICE_ROLE_KEY             # server 端全权
-NEXT_PUBLIC_SUPABASE_URL              # 公开 URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY         # 公开 anon key
+SUPABASE_ACCESS_TOKEN                 # used by the supabase CLI
+SUPABASE_DB_PASSWORD                  # direct DB password
+SUPABASE_SERVICE_ROLE_KEY             # full power on the server side
+NEXT_PUBLIC_SUPABASE_URL              # public URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY         # public anon key
 
-TWILIO_ACCOUNT_SID                    # Twilio 账号
+TWILIO_ACCOUNT_SID                    # Twilio account
 TWILIO_AUTH_TOKEN                     # Twilio auth
-TWILIO_PHONE_NUMBER                   # Twilio 号码
-TWILIO_BOSS_PHONE                     # Alex 真实手机（紧急转接目标）
+TWILIO_PHONE_NUMBER                   # Twilio number
+TWILIO_BOSS_PHONE                     # Alex's real cell phone (emergency transfer target)
 
-OPENAI_API_KEY                        # GPT-4o-mini 摘要
+OPENAI_API_KEY                        # GPT-4o-mini summaries
 
-GOOGLE_MAPS_API_KEY                   # 距离 / service area 验证
+GOOGLE_MAPS_API_KEY                   # distance / service area validation
 
-VERCEL_OIDC_TOKEN                      # Vercel 部署
-WEBHOOK_SECRET                        # Vapi webhook 签名校验
+VERCEL_OIDC_TOKEN                      # Vercel deployment
+WEBHOOK_SECRET                        # Vapi webhook signature verification
 
-EMERGENCY_MAX_ATTEMPTS                # 紧急重试上限
-EMERGENCY_RETRY_INTERVAL_MINUTES      # 重试间隔
-NEXT_PUBLIC_APP_URL                   # 公开 URL（demo-navy-chi-47.vercel.app）
+EMERGENCY_MAX_ATTEMPTS                # emergency retry limit
+EMERGENCY_RETRY_INTERVAL_MINUTES      # retry interval
+NEXT_PUBLIC_APP_URL                   # public URL (demo-navy-chi-47.vercel.app)
 ```
 
 ---
 
-## 6. 已知坑 / TODO
+## 6. Known pitfalls / TODO
 
-1. **Vercel project rename 没做** — dashboard 还叫 `demo`（prj_uVTUUJuMqenAxleB1K7aw1tS2PK2），仓库已改名 `handyline-ai-receptionist`。后续可改。
-2. **Vapi 14 天 retention** — 8 月老 calls 已过期，再拉不到。如需历史数据，升级 Vapi plan。
-3. **MY H-Master 是 placeholder** — assistant 存在但 system prompt 是 placeholder，等真实数据替换。
-4. **OpenAI API 从国内直连超时** — Vercel 部署环境不受影响。
-6. **本打包排除 `node_modules` / `.next` / `.git`** — 重新 `npm install` + `next build` 即可生成。
+1. **Vercel project rename was not done** — the dashboard still shows `demo` (prj_uVTUUJuMqenAxleB1K7aw1tS2PK2), while the repo has already been renamed to `handyline-ai-receptionist`. It can be changed later.
+2. **Vapi 14-day retention** — old calls from August have expired and can no longer be pulled. If you need historical data, upgrade the Vapi plan.
+3. **MY H-Master is a placeholder** — the assistant exists but the system prompt is a placeholder, waiting to be replaced with real data.
+4. **OpenAI API direct connections time out from China** — the Vercel deployment environment is not affected.
+6. **This package excludes `node_modules` / `.next` / `.git`** — just run `npm install` + `next build` again to regenerate them.
 
 ---
 
-## 7. 如果团队需要回滚
+## 7. If the team needs to roll back
 
 ```bash
-# 找历史 commit
+# find historical commits
 git log --oneline | head -20
 
-# 回滚到指定版本
+# roll back to a specific version
 git checkout 2a8253e -- .
 ```
 
-当前主分支最新 commit：`2a8253e feat: standalone Human Handoff + Recording demo`
+Latest commit on the current main branch: `2a8253e feat: standalone Human Handoff + Recording demo`
 
 ---
 
-## 8. 紧急联系方式
+## 8. Emergency contact
 
-- **原项目 owner**：Mimatt（产品和运营）
-- **沟通渠道**：见原始文档 README.md 顶部
+- **Original project owner**: Mimatt (product and operations)
+- **Communication channel**: see the top of the original README.md
 
-祝接手顺利。
+Good luck with the handover.

@@ -79,8 +79,8 @@ handyline-ai-receptionist/
 │   │   ├── page.tsx            Landing
 │   │   ├── orders/[id]/        Work order detail
 │   │   ├── preview/            Customer shareable preview
-│   │   ├── human-calls/         真人通话：录音 + 转写 + AI 纪要
-│   │   ├── human-handoff-demo/ → 旧 demo 地址，已重定向到 /human-calls
+│   │   ├── human-calls/         Human calls: recording + transcript + AI minutes
+│   │   ├── human-handoff-demo/ → Old demo URL, already redirected to /human-calls
 │   │   ├── config/             Boss config panel
 │   │   ├── landing/            Marketing landing
 │   │   ├── sea/                SEA market page
@@ -99,11 +99,11 @@ handyline-ai-receptionist/
 │   │       │   ├── reclassify/            Manual re-classification
 │   │       │   └── llm-stats/             LLM usage & cost
 │   │       ├── v1/                       External partner API
-│   │       ├── human-line/              真人接听线（Twilio 独立号码）
-│   │       │   ├── voice/               来电 → 响 Alex 手机（带签名校验）
-│   │       │   ├── recording/           录音回调 → 转写 → 摘要 → AI 纪要 → 工单
-│   │       │   ├── no-answer/           无人接听兜底（ai / voicemail / hangup）
-│   │       │   └── status/              真人线就绪状态（供 /human-calls 展示）
+│   │       ├── human-line/              Human answering line (standalone Twilio number)
+│   │       │   ├── voice/               Inbound call → ring Alex's phone (with signature validation)
+│   │       │   ├── recording/           Recording callback → transcript → summary → AI minutes → work order
+│   │       │   ├── no-answer/           No-answer fallback (ai / voicemail / hangup)
+│   │       │   └── status/              Human line readiness status (shown by /human-calls)
 │   │       └── dev/                      Dev seed / clear / simulate
 │   ├── components/ui/          shadcn/ui primitives
 │   └── lib/                    Business logic — the heart of the app
@@ -114,10 +114,10 @@ handyline-ai-receptionist/
 │       ├── vapi-event-handler.ts Dispatch Vapi events
 │       ├── emergency-call.ts   Twilio retry logic
 │       ├── notify.ts           Boss notification (SMS/email)
-│       ├── meeting-minutes.ts  AI 会议纪要（真人线生产路径使用）
-│       ├── twilio-signature.ts Twilio 回调签名校验（fail closed）
-│       ├── recording-storage.ts 录音转存 Supabase Storage（永久链接）
-│       ├── transcribe.ts       录音 → 转写
+│       ├── meeting-minutes.ts  AI meeting minutes (used by the human line production path)
+│       ├── twilio-signature.ts Twilio callback signature validation (fail closed)
+│       ├── recording-storage.ts Move recordings to Supabase Storage (permanent links)
+│       ├── transcribe.ts       Recording → transcript
 │       ├── types.ts            DB types (bosses, work_orders, ...)
 │       ├── supabase.ts         Supabase client (anon + service role)
 │       └── utils.ts            Misc utilities
@@ -405,34 +405,39 @@ TwiML templates live in `src/app/api/twilio/emergency-twiml/route.ts`.
 
 ---
 
-## 9. 真人通话 (`/human-calls`) — 真人接听线
+## 9. Human calls (`/human-calls`) — human answering line
 
-真人接听线是一条**独立的 Twilio 号码**（不是 Vapi AI 线）：
-来电 → 响 Alex 的手机 → 接听则双声道录音 + 桥接 → 无人接听走兜底。
+The human answering line is a **standalone Twilio number** (not the Vapi AI line):
+Inbound call → ring Alex's phone → if answered, stereo recording + bridge → if not
+answered, take the fallback path.
 
-**这一节以前是一个 demo。** `/human-handoff-demo` 用 4 段写死的样例转写跑
-"会议纪要"提示词，展示"如果真人接了电话，AI 会记下什么"。2026-10-29 这个
-能力被接进生产路径，假数据全部删除：
+**This section used to be a demo.** `/human-handoff-demo` ran the "meeting minutes"
+prompt over 4 hard-coded sample transcripts to show "if a human answered the phone,
+what would the AI write down". On 2026-10-29 this capability was wired into the
+production path and all fake data was deleted:
 
-| 步骤 | 位置 | 做了什么 |
+| Step | Location | What it does |
 | --- | --- | --- |
-| 来电 | `/api/human-line/voice` | 校验 `X-Twilio-Signature`，生成响铃 TwiML |
-| 录音 | `/api/human-line/recording` | 先把音频转存 Supabase Storage（永久链接），再转写 → 摘要 → **AI 纪要** → upsert 工单 |
-| 兜底 | `/api/human-line/no-answer` | 无人接听 → ai / voicemail / hangup，每种都留工单 |
-| 状态 | `/api/human-line/status` | 真人线是否已开通、Twilio 名下号码、已有多少通 |
+| Inbound call | `/api/human-line/voice` | Validates `X-Twilio-Signature`, generates the ring TwiML |
+| Recording | `/api/human-line/recording` | Copies audio to Supabase Storage (permanent link) first, then transcript → summary → **AI minutes** → upsert work order |
+| Fallback | `/api/human-line/no-answer` | No answer → ai / voicemail / hangup, each one leaves a work order |
+| Status | `/api/human-line/status` | Whether the human line is live, the numbers owned by Twilio, how many calls so far |
 
-**AI 纪要**（`src/lib/meeting-minutes.ts`）：GPT-4o-mini + `json_object`，
-产出 key_facts（姓名/电话/地址/问题/工种/时间/紧急信号/预算信号）、
-action_items（可勾选的待办）、跟进优先级、建议的下一步。
-结果存在 `work_orders.human_minutes`（JSONB），同时映射回普通工单字段
-（summary / intent_summary / issue_type / follow_up_*），所以真人来电在主
-Dashboard 里和 AI 来电长得一样，但多了一份"人会写的纪要"。
+**AI minutes** (`src/lib/meeting-minutes.ts`): GPT-4o-mini + `json_object`,
+producing key_facts (name / phone / address / issue / trade / time / urgency signal /
+budget signal), action_items (checkable to-dos), follow-up priority, and the suggested
+next step.
+The result is stored in `work_orders.human_minutes` (JSONB) and is also mapped back onto
+the regular work-order fields (summary / intent_summary / issue_type / follow_up_*), so
+a human call looks the same as an AI call in the main dashboard, except that it also
+carries "the minutes a human would have written".
 
-页面：`/human-calls`（列表 + 录音播放 + 转写 + 纪要），
-`/human-handoff-demo` 现在重定向到那里。
+Pages: `/human-calls` (list + recording playback + transcript + minutes),
+`/human-handoff-demo` now redirects there.
 
-**注意**：真人线还没有号码（Twilio 账号名下 0 个号码，试用已过期），
-买号并接线（`scripts/activate-human-line.js`）之后才会有真实来电进来。
+**Note**: the human line does not have a number yet (0 numbers under the Twilio account,
+the trial has expired), so real inbound calls only start coming in after a number is
+purchased and wired up (`scripts/activate-human-line.js`).
 
 ---
 
@@ -494,10 +499,10 @@ The import script falls back to the regex version automatically.
 | `/api/boss/callback` | POST | Boss phone callback |
 | `/api/admin/reclassify` | POST | Manual re-classification |
 | `/api/admin/llm-stats` | GET | LLM cost analytics |
-| `/api/human-line/voice` | POST | 真人线来电 → 响铃 TwiML |
-| `/api/human-line/recording` | POST | 录音 → 转写 → 摘要 → AI 纪要 → 工单 |
-| `/api/human-line/no-answer` | POST | 无人接听兜底 |
-| `/api/human-line/status` | GET | 真人线就绪状态 |
+| `/api/human-line/voice` | POST | Human line inbound call → ring TwiML |
+| `/api/human-line/recording` | POST | Recording → transcript → summary → AI minutes → work order |
+| `/api/human-line/no-answer` | POST | No-answer fallback |
+| `/api/human-line/status` | GET | Human line readiness status |
 | `/api/v1/assistants` | GET/POST | Partner API |
 | `/api/v1/singlish-eval` | POST | Singlish evaluation |
 | `/api/dev/seed` | POST | Dev seed |

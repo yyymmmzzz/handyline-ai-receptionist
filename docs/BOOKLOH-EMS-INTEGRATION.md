@@ -6,7 +6,7 @@
 
 HandyLine AI (the current demo) is **a module of Bookloh EMS**, not a
 standalone product. The integration is mandatory: every AI-handled call
-must push a "待确认" event into the EMS calendar within 10 seconds, and
+must push a "pending confirmation" event into the EMS calendar within 10 seconds, and
 the AI must read the EMS calendar + boss config before it can quote prices
 or suggest time slots.
 
@@ -19,16 +19,16 @@ This doc covers three dimensions:
 
 ## 0. Background — What is Bookloh EMS?
 
-From the PRD (`Bookloh AI Receptionist 产品需求文档（PRD）.docx` v0.1, 2026-08-12):
+From the PRD (`Bookloh AI Receptionist Product Requirements Document (PRD).docx` v0.1, 2026-08-12):
 
-> "Bookloh AI Receptionist（Bookloh EMS 新增模块，非独立产品）"
+> "Bookloh AI Receptionist (a new module of Bookloh EMS, not a standalone product)"
 
 Bookloh EMS is the parent system — an **event management / calendar /
 scheduling platform** for the 1-10 person home-services contractor. It
 already has:
-- Calendar ("EMS 日历") with existing events
+- Calendar ("EMS Calendar") with existing events
 - Boss config (price list, FAQs, service radius, business hours)
-- Customer profiles ("档案") with service history
+- Customer profiles ("profile") with service history
 - Multi-channel push (App + SMS)
 - Outbound call triggering (the existing Twilio emergency flow
   re-uses Bookloh EMS outbound)
@@ -48,27 +48,27 @@ HandyLine AI is the **inbound voice layer** that feeds orders into it.
 
 | # | Event / Data | Direction | Trigger | PRD Ref |
 |---|---|---|---|---|
-| 1 | **New work order** ("待确认" calendar event) | AI → EMS | End of call, within 10s | §5.7 "工单落单" |
-| 2 | **Recording URL** (audio file) | AI → EMS | Same as #1 | §5.7 "摘要+录音全在里面" |
-| 3 | **Full transcript** (raw + LLM-extracted) | AI → EMS | Same as #1 | §1.2 "结构化工单" |
+| 1 | **New work order** ("pending confirmation" calendar event) | AI → EMS | End of call, within 10s | §5.7 "work order creation" |
+| 2 | **Recording URL** (audio file) | AI → EMS | Same as #1 | §5.7 "summary + recording all inside" |
+| 3 | **Full transcript** (raw + LLM-extracted) | AI → EMS | Same as #1 | §1.2 "structured work order" |
 | 4 | **Structured summary** (name, intent, tendency, follow-up) | AI → EMS | Same as #1 | §5.7 P0 |
-| 5 | **Pricing breakdown** (quote low/high, trip fee) | AI → EMS | Same as #1 | §5.7 "报价/意向时间" |
-| 6 | **Urgent flag** (outbound already triggered) | AI → EMS | End of call, decision=urgent | §5.9 "AI 直接打电话" |
-| 7 | **Call status update** (confirmed / rejected / rescheduled) | AI → EMS | After callback, async | §5.7 "老板确认" |
+| 5 | **Pricing breakdown** (quote low/high, trip fee) | AI → EMS | Same as #1 | §5.7 "quote / intended time" |
+| 6 | **Urgent flag** (outbound already triggered) | AI → EMS | End of call, decision=urgent | §5.9 "AI calls directly" |
+| 7 | **Call status update** (confirmed / rejected / rescheduled) | AI → EMS | After callback, async | §5.7 "boss confirmation" |
 | 8 | **Call duration, cost, Vapi metadata** | AI → EMS | End of call (for billing) | §3.4 (BP) |
 
 ### 1.2 What data does Bookloh EMS **push to** HandyLine AI?
 
 | # | Event / Data | Direction | Trigger | PRD Ref |
 |---|---|---|---|---|
-| 9 | **Boss config** (price list, FAQs, radius, hours, trades) | EMS → AI | On assistant boot + on update | §3 "结合老板后台配置" |
-| 10 | **Existing calendar slots** (for "意向时间" suggestion) | EMS → AI | Per call, before suggesting time | §6 "老板 EMS 日历已有安排" |
-| 11 | **Customer profile** (history, prefs, blacklist, VIP flag) | EMS → AI | Inbound call (by phone) | §1.2 "档案" |
-| 12 | **Whitelist numbers** (skip AI, direct to boss) | EMS → AI | Per call, before answering | §5.1 "白名单直连" |
-| 13 | **Routing config** (after_hours / always / busy) | EMS → AI | On assistant boot | §3.2 "三种模式" |
-| 14 | **Outbound call result** (boss picked up / voicemail / no answer) | EMS → AI | After Twilio call ends | §5.9 "IVR 决策菜单" |
-| 15 | **Recording consent rules** (one-party / two-party by state) | EMS → AI | Per call, by area code | §5.2 "按州法律调整" |
-| 16 | **Push delivery status** (SMS/App read) | EMS → AI | Async, for analytics | §5.9 "推送渠道配置" |
+| 9 | **Boss config** (price list, FAQs, radius, hours, trades) | EMS → AI | On assistant boot + on update | §3 "combine with boss backend config" |
+| 10 | **Existing calendar slots** (for "intended time" suggestion) | EMS → AI | Per call, before suggesting time | §6 "boss's existing EMS calendar schedule" |
+| 11 | **Customer profile** (history, prefs, blacklist, VIP flag) | EMS → AI | Inbound call (by phone) | §1.2 "profile" |
+| 12 | **Whitelist numbers** (skip AI, direct to boss) | EMS → AI | Per call, before answering | §5.1 "whitelist direct connect" |
+| 13 | **Routing config** (after_hours / always / busy) | EMS → AI | On assistant boot | §3.2 "three modes" |
+| 14 | **Outbound call result** (boss picked up / voicemail / no answer) | EMS → AI | After Twilio call ends | §5.9 "IVR decision menu" |
+| 15 | **Recording consent rules** (one-party / two-party by state) | EMS → AI | Per call, by area code | §5.2 "adjust per state law" |
+| 16 | **Push delivery status** (SMS/App read) | EMS → AI | Async, for analytics | §5.9 "push channel configuration" |
 
 ### 1.3 What is shared (both sides need read access)?
 
@@ -466,8 +466,8 @@ demo/
 
 ## 5. References
 
-- PRD: `/Users/yimozhang/Business/Handy Bookloh/Bookloh AI Receptionist 产品需求文档（PRD）.docx`
-- BP: `/Users/yimozhang/Business/Handy Bookloh/HandyLine AI 商业计划书_v0.3.docx`
-- BP change log: `/Users/yimozhang/Business/Handy Bookloh/BP_改动清单_v0.1→v0.2.md`
+- PRD: `/Users/yimozhang/Business/Handy Bookloh/Bookloh AI Receptionist Product Requirements Document (PRD).docx`
+- BP: `/Users/yimozhang/Business/Handy Bookloh/HandyLine AI Business Plan_v0.3.docx`
+- BP change log: `/Users/yimozhang/Business/Handy Bookloh/BP_Change Log_v0.1→v0.2.md`
 - SETUP.md TODO: `/Users/yimozhang/Business/Handy Bookloh/handyline-ai-receptionist/SETUP.md` line 354
 - Current code: `/Users/yimozhang/Business/Handy Bookloh/handyline-ai-receptionist/`
