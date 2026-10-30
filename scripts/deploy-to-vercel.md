@@ -1,111 +1,147 @@
-# Vercel 部署指南
+# Vercel deployment guide
 
-## 最快方法（5 分钟）
+**Current state (2026-10-30): the site is already live.** The Vercel project
+`demo` is connected to the GitHub repo `yyymmmzzz/handyline-ai-receptionist`
+with automatic deployments enabled.
 
-### 第 1 步：注册 / 登录 Vercel
-
-打开 https://vercel.com/signup，用 **GitHub 账号** 登录（推荐）
-
-### 第 2 步：建项目
-
-打开 https://vercel.com/new
-
-**方法 A（推荐）：拖拽部署**
-- 把打包好的 Next.js 项目 zip 直接拖到 "Import Project" 页面
-- Vercel 会自动识别为 Next.js 项目
-
-**方法 B：用 Git**
-- 推到 GitHub 仓库
-- Vercel 选 "Import Git Repository"
-
-### 第 3 步：项目设置
-
-- **Project Name**: `handyline-demo`（Vercel 上唯一即可）
-- **Framework Preset**: Next.js（自动检测）
-- **Root Directory**: `./`
-- **Build Command**: `next build`（默认）
-- **Output Directory**: `.next`（默认）
-- **Install Command**: `npm install`（默认）
-
-### 第 4 步：环境变量（最关键）
-
-点 "Environment Variables"，**一个一个加**（Vercel 不会从 .env 读）：
-
-#### Supabase
 ```
-NEXT_PUBLIC_SUPABASE_URL = https://cggqxaxunqxsgurgmiqh.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY = (从 .env.local 复制)
-SUPABASE_SERVICE_ROLE_KEY = (从 .env.local 复制 — secret)
+Production URL: https://demo-navy-chi-47.vercel.app
+Project:        demo   (prj_uVTUUJuMqenAxleB1K7aw1tS2PK2)
 ```
 
-#### Vapi
-```
-VAPI_API_KEY = (从 .env.local 复制 — secret)
-VAPI_ASSISTANT_ID = 42523b3e-fbaf-436a-a26a-2a6853a12ad7
-NEXT_PUBLIC_VAPI_ASSISTANT_ID = 42523b3e-fbaf-436a-a26a-2a6853a12ad7
-NEXT_PUBLIC_VAPI_PUBLIC_KEY = (从 .env.local 复制)
-VAPI_EMERGENCY_ASSISTANT_ID = 7e2507a3-f349-4128-b117-5d3f35dae0cb
-VAPI_PHONE_NUMBER_ID = b73a9ba1-fca1-4eed-b58d-82652e57a2a4
-```
-
-#### Twilio
-```
-TWILIO_ACCOUNT_SID = (从 .env.local 复制 — secret)
-TWILIO_AUTH_TOKEN = (从 .env.local 复制 — secret)
-TWILIO_PHONE_NUMBER = +17243620422
-TWILIO_BOSS_PHONE = +15127126713
-```
-
-#### App config
-```
-WEBHOOK_SECRET = dev-secret
-NEXT_PUBLIC_APP_URL = https://你的实际-vercel-域名.vercel.app (Vercel 给你的实际域名)
-EMERGENCY_RETRY_INTERVAL_MINUTES = 5
-EMERGENCY_MAX_ATTEMPTS = 3
-EMERGENCY_TEST_MODE = 1  ← **重要：先设 1，避免生产第一单真打电话到老板**
-```
-
-#### 可选
-```
-GOOGLE_MAPS_API_KEY = (如果有 — secret)
-```
-
-### 第 5 步：点 Deploy
-
-- 等待 1-3 分钟 build
-- 部署成功会拿到 URL：`https://你的项目名-xxxx.vercel.app`
-
-### 第 6 步：把 Vapi 切到 Vercel URL
-
-部署完拿到 URL 后告诉我，我帮你：
-1. 把 Vapi `serverUrl` 切到 `https://你的域名.vercel.app/api/vapi/tools`
-2. 改 `.env.local` 里的 `NEXT_PUBLIC_APP_URL`（本地 dev 还是要用 Cloudflare）
-3. 停掉 cloudflared LaunchAgent
+> **Deploying is `git push origin main`.** There is no build step to run
+> locally and no `vercel login` needed. If you renamed the repo, the Vercel
+> project still points at the old name — rename it in the dashboard
+> (Settings → General → Project Name) so future deploys keep working.
 
 ---
 
-## 自动复制环境变量的小技巧
-
-如果你之前在 Vercel 部署过别的项目，可以用 vercel CLI 复制：
+## Deploying a code change
 
 ```bash
-npx vercel login   # 浏览器登录
-npx vercel link    # 关联项目
-npx vercel env pull .env.production  # 下载远程 env 到本地
+cd "/Users/yimozhang/Business/Handy Bookloh/handyline-ai-receptionist"
+npx tsc --noEmit                 # must be clean
+node scripts/test-static-config.js   # 62 checks
+git add -A && git commit -m "…"
+git push origin main             # ← this is the deploy
 ```
 
-或者一次性添加所有 env：
+Vercel builds and swaps the production alias automatically (1–3 minutes).
+Confirm it landed:
+
+```bash
+curl -sS --http1.1 -o /dev/null -w "%{http_code}\n" https://demo-navy-chi-47.vercel.app/
+```
+
+> Use `curl`, not Node `fetch` — Node's TLS stack times out against this
+> domain on some networks.
+
+---
+
+## Environment variables
+
+Code deploys work without touching environment variables. Two of them are
+still missing on Vercel and are worth adding:
+
+| Variable | Why it matters | How to add |
+|---|---|---|
+| `CRON_SECRET` | Protects `/api/cron/keepalive` and `/api/cron/emergency-retry` | `npx vercel login` then `./scripts/push-cron-env.sh` |
+| `SUPABASE_ACCESS_TOKEN` | Lets the keepalive job restore an idle Supabase project | same |
+
+Until `CRON_SECRET` is set, `/api/cron/keepalive` reports
+`restoreEnabled: false` — meaning that if the free-tier Supabase project is
+paused for 7 days of inactivity, nothing will bring it back automatically.
+
+Everything else is already set on Vercel.
+
+---
+
+## Full list of variables (for a fresh project)
+
+Only needed if you ever stand up a brand-new Vercel project from scratch.
+Copy the values from `.env.local` — Vercel does **not** read `.env` files, so
+every one has to be added by hand under Settings → Environment Variables.
+
+### Supabase
+```
+NEXT_PUBLIC_SUPABASE_URL        = https://cggqxaxunqxsgurgmiqh.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY   = (copy from .env.local)
+SUPABASE_SERVICE_ROLE_KEY       = (copy from .env.local — secret)
+```
+
+### Vapi
+```
+VAPI_API_KEY                    = (copy from .env.local — secret)
+VAPI_ASSISTANT_ID               = 42523b3e-fbaf-436a-a26a-2a6853a12ad7
+NEXT_PUBLIC_VAPI_ASSISTANT_ID   = 42523b3e-fbaf-436a-a26a-2a6853a12ad7
+NEXT_PUBLIC_VAPI_PUBLIC_KEY     = (copy from .env.local)
+VAPI_EMERGENCY_ASSISTANT_ID      = 7e2507a3-f349-4128-b117-5d3f35dae0cb
+VAPI_PHONE_NUMBER_ID             = b73a9ba1-fca1-4eed-b58d-82652e57a2a4
+```
+
+### Twilio
+```
+TWILIO_ACCOUNT_SID   = (copy from .env.local — secret)
+TWILIO_AUTH_TOKEN    = (copy from .env.local — secret)
+TWILIO_PHONE_NUMBER  = the number SMS is sent from — must be owned by THIS Twilio account
+TWILIO_BOSS_PHONE    = +17137422387   (Alex's phone — emergency escalation)
+```
+
+> `TWILIO_PHONE_NUMBER` **must** be a number our Twilio account owns. The Vapi
+> AI line is not, so sending "from" it through Twilio can never work — that is
+> why every SMS notification used to fail. After the human line is bought,
+> `scripts/activate-human-line.js` points this at the new number.
+
+### App config
+```
+WEBHOOK_SECRET                     = (copy from .env.local)
+NEXT_PUBLIC_APP_URL                = https://demo-navy-chi-47.vercel.app
+NEXT_PUBLIC_VAPI_PUBLIC_KEY        = (copy from .env.local)
+CRON_SECRET                        = (copy from .env.local)
+SUPABASE_ACCESS_TOKEN              = (copy from .env.local)
+OPENAI_API_KEY                     = (copy from .env.local — secret)
+EMERGENCY_RETRY_INTERVAL_MINUTES   = 5
+EMERGENCY_MAX_ATTEMPTS             = 3
+```
+
+### Optional
+```
+GOOGLE_MAPS_API_KEY = (if you have one — secret)
+```
+
+---
+
+## Pointing Vapi at the deployment
+
+Vapi's `serverUrl` must be the Vercel domain, not a local tunnel:
+
+```
+https://demo-navy-chi-47.vercel.app/api/vapi/tools
+```
+
+If you ever need to pull the remote environment down:
+
+```bash
+npx vercel login                       # browser sign-in
+npx vercel link                        # attach to the project
+npx vercel env pull .env.production    # download remote env
+```
+
+Or add a single variable:
 
 ```bash
 npx vercel env add NEXT_PUBLIC_SUPABASE_URL
-# 然后粘贴值，敲回车
+# paste the value, press enter
 ```
 
 ---
 
-## 部署后第一次跑
+## First run after a deploy
 
-1. 打开 `https://你的域名.vercel.app/` — 应该看到 dashboard
-2. 测试场景用 dev mode（EMERGENCY_TEST_MODE=1）— 紧急场景不会真打电话
-3. 全部 OK 后，可以设 `EMERGENCY_TEST_MODE=0` 启用真实外呼
-4. 真实给 +17243620422 打一次电话做端到端验证
+1. Open `https://demo-navy-chi-47.vercel.app/` — the dashboard should load.
+2. Open `/human-calls` — the human line status banner tells you whether the
+   line can actually take a call yet.
+3. Check `/api/cron/keepalive` — it should report `restoreEnabled: true`
+   once `CRON_SECRET` and `SUPABASE_ACCESS_TOKEN` are set.
+4. Make a real test call to the AI line and confirm the work order appears
+   with a transcript and a summary.

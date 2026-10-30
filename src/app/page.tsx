@@ -153,7 +153,7 @@ function DashboardPageInner() {
             href="/human-calls"
             className="px-3 py-1.5 text-sm rounded-md border border-purple-200 bg-purple-50 text-purple-700 font-medium hover:bg-purple-100"
           >
-            👤 真人通话{stats.human ? ` (${stats.human})` : ""}
+            👤 Human Calls{stats.human ? ` (${stats.human})` : ""}
           </Link>
           <div className="text-xs text-gray-400">
             {orders.length > 0 && `${orders.length} total`}

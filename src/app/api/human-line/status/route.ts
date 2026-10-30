@@ -104,10 +104,10 @@ export async function GET() {
       },
       // A single sentence the UI can show without interpreting the rest.
       headline: anyLive
-        ? "真人线已开通，来电会先响 Alex 的手机。"
+        ? "The human line is live — incoming calls will ring Alex's phone."
         : lines.some((l) => l.enabled)
-          ? "真人线已启用但号码还没在 Twilio 名下，来电暂时进不来。"
-          : "真人线尚未启用（还没买号/接线）。",
+          ? "The human line is enabled but the number is not owned by Twilio yet, so calls cannot come in."
+          : "The human line is not enabled yet (no number bought / not wired up).",
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -399,7 +399,7 @@ export default function WorkOrderDetailPage() {
               href="/human-calls"
               className="text-xs text-blue-600 hover:text-blue-700 underline"
             >
-              查看所有真人通话 →
+              View all human calls →
             </Link>
           </div>
         </Section>

@@ -122,10 +122,10 @@ export default function HumanCallsPage() {
               ← Dashboard
             </Link>
             <span className="text-slate-300">|</span>
-            <h1 className="text-lg font-semibold text-slate-900">真人通话 Human Calls</h1>
+            <h1 className="text-lg font-semibold text-slate-900">Human Calls</h1>
           </div>
           <div className="text-xs text-slate-500">
-            {calls.length > 0 && `${calls.length} 通真人来电`}
+            {calls.length > 0 && `${calls.length} human call${calls.length === 1 ? "" : "s"}`}
           </div>
         </div>
       </header>
@@ -136,20 +136,20 @@ export default function HumanCallsPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="真人来电" value={stats.total} />
-          <StatCard label="有录音" value={stats.withRecording} accent="blue" />
-          <StatCard label="有 AI 纪要" value={stats.withMinutes} accent="purple" />
-          <StatCard label="待处理" value={stats.callback} accent="amber" />
+          <StatCard label="Human calls" value={stats.total} />
+          <StatCard label="With recording" value={stats.withRecording} accent="blue" />
+          <StatCard label="With AI minutes" value={stats.withMinutes} accent="purple" />
+          <StatCard label="Needs action" value={stats.callback} accent="amber" />
         </div>
 
         {/* Filters */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500 uppercase tracking-wide">筛选:</span>
+          <span className="text-xs text-slate-500 uppercase tracking-wide">Filter:</span>
           {([
-            { key: "all", label: "全部" },
-            { key: "recording", label: "🎧 有录音" },
-            { key: "minutes", label: "📋 有纪要" },
-            { key: "callback", label: "⏳ 待处理" },
+            { key: "all", label: "All" },
+            { key: "recording", label: "🎧 With recording" },
+            { key: "minutes", label: "📋 With minutes" },
+            { key: "callback", label: "⏳ Needs action" },
           ] as const).map((f) => (
             <button
               key={f.key}
@@ -167,7 +167,7 @@ export default function HumanCallsPage() {
 
         {/* Calls */}
         {loading ? (
-          <div className="text-center text-sm text-slate-500 py-12">加载中…</div>
+          <div className="text-center text-sm text-slate-500 py-12">Loading…</div>
         ) : filtered.length === 0 ? (
           <EmptyState hasAny={calls.length > 0} />
         ) : (
@@ -193,14 +193,14 @@ function StatusBanner({ status, loading }: { status: LineStatus | null; loading:
   if (loading) {
     return (
       <div className="bg-white border border-slate-200 rounded-lg p-4 text-sm text-slate-500">
-        正在检查真人线状态…
+        Checking line status…
       </div>
     );
   }
   if (!status || !status.ok) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800">
-        无法读取真人线状态。{status?.error ? `（${status.error}）` : ""}
+        Could not read the human line status. {status?.error ? `(${status.error})` : ""}
       </div>
     );
   }
@@ -215,10 +215,11 @@ function StatusBanner({ status, loading }: { status: LineStatus | null; loading:
         <div>
           <div className="text-sm font-semibold">{status.headline}</div>
           <div className="text-xs mt-1 opacity-80">
-            {status.twilio.trial && "Twilio 仍是试用账号（不能外呼/发短信，且试用已过期）。"}
+            {status.twilio.trial &&
+              "Twilio is still a trial account (no outbound calls or SMS, and the trial has expired)."}
             {status.twilio.ownedNumbers.length > 0
-              ? ` Twilio 名下号码：${status.twilio.ownedNumbers.join(", ")}。`
-              : " Twilio 名下还没有任何号码。"}
+              ? ` Numbers owned by Twilio: ${status.twilio.ownedNumbers.join(", ")}.`
+              : " Twilio does not own any phone numbers yet."}
           </div>
         </div>
         <div className="text-xs space-y-1">
@@ -232,12 +233,12 @@ function StatusBanner({ status, loading }: { status: LineStatus | null; loading:
                     : "bg-white text-slate-600 border-slate-300"
                 }`}
               >
-                {l.live ? "已开通" : l.enabled ? "待买号" : "未启用"}
+                {l.live ? "Live" : l.enabled ? "No number yet" : "Disabled"}
               </span>
               <span className="opacity-70">
-                {l.number || "无号码"} → 响 {l.answerPhone || "未设置"}{" "}
+                {l.number || "no number"} → rings {l.answerPhone || "not set"}{" "}
                 {l.ringSeconds ? `(${l.ringSeconds}s)` : ""}
-                {l.fallback ? ` · 无人接→${l.fallback}` : ""}
+                {l.fallback ? ` · no answer → ${l.fallback}` : ""}
               </span>
             </div>
           ))}
@@ -252,17 +253,18 @@ function EmptyState({ hasAny }: { hasAny: boolean }) {
     return (
       <div className="bg-white border-2 border-dashed border-slate-200 rounded-lg p-10 text-center">
         <div className="text-slate-300 text-3xl mb-2">🔎</div>
-        <p className="text-sm text-slate-600">当前筛选条件下没有真人通话。</p>
+        <p className="text-sm text-slate-600">No human calls match this filter.</p>
       </div>
     );
   }
   return (
     <div className="bg-white border-2 border-dashed border-slate-200 rounded-lg p-10 text-center">
       <div className="text-slate-300 text-3xl mb-2">📞</div>
-      <p className="text-sm font-medium text-slate-700 mb-1">还没有真人通话记录</p>
+      <p className="text-sm font-medium text-slate-700 mb-1">No human calls yet</p>
       <p className="text-sm text-slate-500 max-w-md mx-auto">
-        真人线（Twilio 独立号码）还没有开通：号码买好、接线之后，
-        Alex 手机每响一声，这里就会多出一条记录 —— 录音、转写、AI 纪要一应俱全。
+        The human line (a separate Twilio number) is not live yet. Once the number is
+        bought and wired up, every call that reaches Alex shows up here — recording,
+        transcript and AI minutes included.
       </p>
     </div>
   );
@@ -293,7 +295,7 @@ function CallCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-slate-900">
-              {call.customer_name_extracted || call.customer_name || "未知客户"}
+              {call.customer_name_extracted || call.customer_name || "Unknown caller"}
             </span>
             <span className="text-xs text-slate-500 font-mono">{call.customer_phone}</span>
             {priority && (
@@ -307,18 +309,18 @@ function CallCard({
             )}
             {call.human_answered === false && (
               <span className="text-xs px-1.5 py-0.5 rounded border bg-slate-100 text-slate-600 border-slate-300">
-                无人接听
+                No answer
               </span>
             )}
           </div>
           <div className="text-xs text-slate-500 mt-1 truncate">
-            {minutes?.summary || call.summary || call.intent_summary || "（无摘要）"}
+            {minutes?.summary || call.summary || call.intent_summary || "(no summary)"}
           </div>
           <div className="text-xs text-slate-400 mt-1">
             {formatDateTime(call.created_at)} · {relativeTime(call.created_at)}
             {call.line_label ? ` · ${call.line_label}` : ""}
-            {call.recording_url ? " · 🎧 有录音" : " · 无录音"}
-            {minutes ? " · 📋 有 AI 纪要" : " · 无 AI 纪要"}
+            {call.recording_url ? " · 🎧 recording" : " · no recording"}
+            {minutes ? " · 📋 AI minutes" : " · no AI minutes"}
           </div>
         </div>
         <span className="text-slate-400 text-sm shrink-0">{open ? "▲" : "▼"}</span>
@@ -328,17 +330,17 @@ function CallCard({
         <div className="border-t border-slate-200 px-4 py-4 space-y-4 bg-slate-50/40">
           {/* Recording */}
           <div>
-            <div className="text-xs font-semibold text-slate-500 uppercase mb-1">录音</div>
+            <div className="text-xs font-semibold text-slate-500 uppercase mb-1">Recording</div>
             {call.recording_url ? (
               <audio controls src={call.recording_url} className="w-full" />
             ) : (
-              <div className="text-sm text-slate-400">这通电话没有录音文件。</div>
+              <div className="text-sm text-slate-400">No recording file for this call.</div>
             )}
           </div>
 
           {/* AI minutes */}
           <div>
-            <div className="text-xs font-semibold text-slate-500 uppercase mb-1">AI 纪要</div>
+            <div className="text-xs font-semibold text-slate-500 uppercase mb-1">AI minutes</div>
             {minutes ? (
               <MinutesCard
                 minutes={minutes}
@@ -348,8 +350,8 @@ function CallCard({
               />
             ) : (
               <div className="text-sm text-slate-400">
-                这通电话没有生成 AI 纪要
-                {call.human_minutes_source === "none" && "（生成失败或没有转写内容）"}。
+                No AI minutes were generated for this call
+                {call.human_minutes_source === "none" && " (generation failed or there was no transcript)"}.
               </div>
             )}
           </div>
@@ -358,9 +360,9 @@ function CallCard({
           {call.transcript && call.transcript.length > 0 && (
             <div>
               <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
-                转写
+                Transcript
                 <span className="ml-2 font-normal normal-case text-slate-400">
-                  （语音转写没有区分说话人）
+                  (speech-to-text does not separate speakers)
                 </span>
               </div>
               <div className="bg-white border border-slate-200 rounded-md p-3 text-sm text-slate-800 max-h-72 overflow-y-auto whitespace-pre-wrap">
@@ -378,14 +380,14 @@ function CallCard({
               href={`/orders/${call.id}`}
               className="px-3 py-1.5 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
             >
-              打开工单详情 →
+              Open work order →
             </Link>
             {call.customer_phone && (
               <a
                 href={`tel:${call.customer_phone}`}
                 className="px-3 py-1.5 rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
               >
-                回拨 {call.customer_phone}
+                Call back {call.customer_phone}
               </a>
             )}
           </div>
@@ -409,17 +411,17 @@ function MinutesCard({
   return (
     <div className="space-y-3">
       <div className="bg-white border border-slate-200 rounded-lg p-3">
-        <div className="text-xs font-semibold text-slate-500 uppercase mb-1">摘要</div>
+        <div className="text-xs font-semibold text-slate-500 uppercase mb-1">Summary</div>
         <div className="text-sm text-slate-900">{minutes.summary || "—"}</div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="bg-white border border-slate-200 rounded-lg p-3">
-          <div className="text-xs font-semibold text-slate-500 uppercase mb-1">客户诉求</div>
+          <div className="text-xs font-semibold text-slate-500 uppercase mb-1">Customer intent</div>
           <div className="text-sm text-slate-900">{minutes.intent || "—"}</div>
         </div>
         <div className="bg-white border border-slate-200 rounded-lg p-3">
-          <div className="text-xs font-semibold text-slate-500 uppercase mb-1">跟进优先级</div>
+          <div className="text-xs font-semibold text-slate-500 uppercase mb-1">Follow-up priority</div>
           <span
             className={`inline-block text-sm font-medium px-2 py-1 rounded border ${
               PRIORITY_STYLE[minutes.follow_up_priority] || ""
@@ -431,22 +433,22 @@ function MinutesCard({
       </div>
 
       <div className="bg-white border border-slate-200 rounded-lg p-3">
-        <div className="text-xs font-semibold text-slate-500 uppercase mb-2">关键信息</div>
+        <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Key facts</div>
         <div className="space-y-1.5 text-sm">
-          <FactRow label="姓名" value={minutes.key_facts.name} />
-          <FactRow label="电话" value={minutes.key_facts.phone} />
-          <FactRow label="地址" value={minutes.key_facts.address} />
-          <FactRow label="问题" value={minutes.key_facts.issue} />
-          <FactRow label="工种" value={minutes.key_facts.trade_needed} />
-          <FactRow label="时间" value={minutes.key_facts.timing} />
-          <FactRow label="紧急信号" value={minutes.key_facts.urgency_signals} highlight />
-          <FactRow label="预算信号" value={minutes.key_facts.budget_signals} />
+          <FactRow label="Name" value={minutes.key_facts.name} />
+          <FactRow label="Phone" value={minutes.key_facts.phone} />
+          <FactRow label="Address" value={minutes.key_facts.address} />
+          <FactRow label="Issue" value={minutes.key_facts.issue} />
+          <FactRow label="Trade" value={minutes.key_facts.trade_needed} />
+          <FactRow label="Timing" value={minutes.key_facts.timing} />
+          <FactRow label="Urgency" value={minutes.key_facts.urgency_signals} highlight />
+          <FactRow label="Budget" value={minutes.key_facts.budget_signals} />
         </div>
       </div>
 
       {minutes.action_items.length > 0 && (
         <div className="bg-white border border-slate-200 rounded-lg p-3">
-          <div className="text-xs font-semibold text-slate-500 uppercase mb-2">待办事项</div>
+          <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Action items</div>
           <div className="space-y-2">
             {minutes.action_items.map((item, i) => {
               const key = `${callId}:${i}`;
@@ -477,7 +479,7 @@ function MinutesCard({
 
       {minutes.topics_mentioned.length > 0 && (
         <div className="bg-white border border-slate-200 rounded-lg p-3">
-          <div className="text-xs font-semibold text-slate-500 uppercase mb-2">涉及话题</div>
+          <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Topics</div>
           <div className="flex flex-wrap gap-1.5">
             {minutes.topics_mentioned.map((t, i) => (
               <span
@@ -492,14 +494,14 @@ function MinutesCard({
       )}
 
       <div className="bg-white border border-slate-200 rounded-lg p-3">
-        <div className="text-xs font-semibold text-slate-500 uppercase mb-1">客户倾向</div>
+        <div className="text-xs font-semibold text-slate-500 uppercase mb-1">Customer tendency</div>
         <div className="text-sm text-slate-900">{minutes.customer_tendency || "—"}</div>
       </div>
 
       {minutes.follow_up_recommendation && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
           <div className="text-xs font-semibold text-amber-700 uppercase mb-1">
-            💡 建议的下一步
+            💡 Recommended next step
           </div>
           <div className="text-sm text-amber-900">{minutes.follow_up_recommendation}</div>
         </div>
@@ -529,7 +531,7 @@ function FactRow({
             : "text-slate-400 italic"
         }`}
       >
-        {value || "未提及"}
+        {value || "not mentioned"}
       </div>
     </div>
   );

@@ -95,7 +95,7 @@ function postForm(path, params, { sign = true, overrideUrl = null } = {}) {
 
 async function main() {
   console.log("═".repeat(62));
-  console.log("  真人接听线 — 端到端自测");
+  console.log("  Human answering line — end-to-end self-test");
   console.log(`  target: ${BASE_URL}`);
   console.log("═".repeat(62));
 
@@ -109,16 +109,16 @@ async function main() {
     `update bosses set human_line_number = '${TEST_NUMBER}', human_line_enabled = true
      where id = '${ALEX_BOSS_ID}';`,
   );
-  console.log(`\n  (测试期间 human_line_number = ${TEST_NUMBER}，结束后恢复)`);
+  console.log(`\n  (during the test human_line_number = ${TEST_NUMBER}; restored afterwards)`);
 
   const createdOrderIds = [];
   try {
     // --- 1. Security: an unsigned request must be refused.
-    console.log("\n[1] 签名校验");
+    console.log("\n[1] Signature checks");
     const noSig = postForm("/api/human-line/voice", { From: "+17130000000", To: TEST_NUMBER }, { sign: false });
     noSig.status === 403
-      ? pass("无签名请求被拒绝", "HTTP 403")
-      : fail("无签名请求被拒绝", `期望 403，实际 ${noSig.status}`);
+      ? pass("Unsigned request rejected", "HTTP 403")
+      : fail("Unsigned request rejected", `expected 403, got ${noSig.status}`);
 
     const badSig = postForm(
       "/api/human-line/voice",
@@ -136,8 +136,8 @@ async function main() {
       { encoding: "utf8" },
     );
     Number(wrongSigBody) === 403
-      ? pass("错误签名被拒绝", "HTTP 403")
-      : fail("错误签名被拒绝", `期望 403，实际 ${wrongSigBody}`);
+      ? pass("Wrong signature rejected", "HTTP 403")
+      : fail("Wrong signature rejected", `expected 403, got ${wrongSigBody}`);
 
     // --- 2. voice: TwiML that dials Alex.
     console.log("\n[2] /api/human-line/voice");
@@ -147,16 +147,16 @@ async function main() {
       CallSid: "CA_TEST_VOICE",
     });
     if (voice.status === 200) {
-      pass("返回 200");
-      voice.body.includes("<Dial") ? pass("TwiML 里有 <Dial>") : fail("TwiML 里有 <Dial>", voice.body.slice(0, 160));
+      pass("Returned 200");
+      voice.body.includes("<Dial") ? pass("TwiML contains <Dial>") : fail("TwiML contains <Dial>", voice.body.slice(0, 160));
       voice.body.includes("+17137422387")
-        ? pass("拨号目标是 Alex 的手机", "+17137422387")
-        : fail("拨号目标是 Alex 的手机", voice.body.slice(0, 200));
+        ? pass("Dials Alex's phone", "+17137422387")
+        : fail("Dials Alex's phone", voice.body.slice(0, 200));
       voice.body.includes(`timeout="20"`) || voice.body.includes("timeout=")
-        ? pass("设置了无人接听超时")
-        : fail("设置了无人接听超时", voice.body.slice(0, 200));
+        ? pass("No-answer timeout is set")
+        : fail("No-answer timeout is set", voice.body.slice(0, 200));
     } else {
-      fail("voice 回调", `HTTP ${voice.status} ${voice.body.slice(0, 160)}`);
+      fail("voice callback", `HTTP ${voice.status} ${voice.body.slice(0, 160)}`);
     }
 
     // --- 3. no-answer: the configured fallback.
@@ -168,19 +168,19 @@ async function main() {
       DialCallDuration: "20",
     });
     if (noAnswer.status === 200) {
-      pass("返回 200");
-      noAnswer.body.includes("<Response>") ? pass("返回合法 TwiML") : fail("返回合法 TwiML", noAnswer.body.slice(0, 160));
+      pass("Returned 200");
+      noAnswer.body.includes("<Response>") ? pass("Returned valid TwiML") : fail("Returned valid TwiML", noAnswer.body.slice(0, 160));
     } else {
-      fail("no-answer 回调", `HTTP ${noAnswer.status} ${noAnswer.body.slice(0, 160)}`);
+      fail("no-answer callback", `HTTP ${noAnswer.status} ${noAnswer.body.slice(0, 160)}`);
     }
 
     // --- 4. recording: a finished recording becomes a work order.
-    console.log("\n[4] /api/human-line/recording（录音 → 工单）");
+    console.log("\n[4] /api/human-line/recording (recording → work order)");
     const audio = await mgmtQuery(
       `select recording_url from work_orders where recording_url is not null order by created_at desc limit 1;`,
     );
     if (!audio.length) {
-      fail("找一段现成录音做测试素材", "库里没有录音");
+      fail("Found an existing recording to use as test material", "no recordings in the database");
     } else {
       const recordingUrl = audio[0].recording_url;
       const callSid = "CA_TEST_RECORDING";
@@ -194,11 +194,11 @@ async function main() {
         RecordingContentType: "audio/wav",
       });
       if (rec.status === 200) {
-        pass("返回 200");
+        pass("Returned 200");
         let body = {};
         try { body = JSON.parse(rec.body); } catch { /* keep the raw text */ }
         if (body.workOrderId) {
-          pass("生成了工单", body.workOrderId);
+          pass("Created a work order", body.workOrderId);
           createdOrderIds.push(body.workOrderId);
           const row = await mgmtQuery(
             `select call_type, ai_decision, recording_url, transcript, summary, summary_source, line_label, status,
@@ -207,38 +207,38 @@ async function main() {
           );
           const o = row[0] || {};
           o.call_type === "human" ? pass("call_type = human") : fail("call_type = human", String(o.call_type));
-          o.recording_url ? pass("录音已保存", o.recording_url.slice(0, 70) + "…") : fail("录音已保存", "空");
+          o.recording_url ? pass("Recording stored", o.recording_url.slice(0, 70) + "…") : fail("Recording stored", "empty");
           const tlen = Array.isArray(o.transcript) ? o.transcript.length : 0;
-          tlen > 0 ? pass("转写已生成", `${tlen} 行`) : fail("转写已生成", "空");
-          o.summary ? pass("摘要已生成", String(o.summary).slice(0, 70)) : fail("摘要已生成", "空");
-          o.line_label ? pass("线路标签", o.line_label) : fail("线路标签", "空");
+          tlen > 0 ? pass("Transcript generated", `${tlen} block(s)`) : fail("Transcript generated", "empty");
+          o.summary ? pass("Summary generated", String(o.summary).slice(0, 70)) : fail("Summary generated", "empty");
+          o.line_label ? pass("Line label", o.line_label) : fail("Line label", "empty");
 
           // AI meeting minutes — the thing the demo used to fake.
           if (o.human_minutes) {
-            pass("AI 纪要已生成", o.human_minutes_source === "llm" ? "来源 llm" : `来源 ${o.human_minutes_source}`);
+            pass("AI minutes generated", o.human_minutes_source === "llm" ? "source llm" : `source ${o.human_minutes_source}`);
             o.human_minutes.summary
-              ? pass("纪要有摘要", String(o.human_minutes.summary).slice(0, 70))
-              : fail("纪要有摘要", "空");
+              ? pass("Minutes have a summary", String(o.human_minutes.summary).slice(0, 70))
+              : fail("Minutes have a summary", "empty");
             o.human_minutes.key_facts && typeof o.human_minutes.key_facts === "object"
-              ? pass("纪要有 key_facts")
-              : fail("纪要有 key_facts", JSON.stringify(o.human_minutes.key_facts));
+              ? pass("Minutes have key_facts")
+              : fail("Minutes have key_facts", JSON.stringify(o.human_minutes.key_facts));
             Array.isArray(o.human_minutes.action_items)
-              ? pass("纪要有 action_items 数组", `${o.human_minutes.action_items.length} 条`)
-              : fail("纪要有 action_items 数组", "不是数组");
+              ? pass("Minutes have an action_items array", `${o.human_minutes.action_items.length} item(s)`)
+              : fail("Minutes have an action_items array", "not an array");
             ["high", "medium", "low"].includes(o.human_minutes.follow_up_priority)
-              ? pass("跟进优先级合法", o.human_minutes.follow_up_priority)
-              : fail("跟进优先级合法", String(o.human_minutes.follow_up_priority));
+              ? pass("Follow-up priority is valid", o.human_minutes.follow_up_priority)
+              : fail("Follow-up priority is valid", String(o.human_minutes.follow_up_priority));
           } else {
             fail(
-              "AI 纪要已生成",
-              `human_minutes 为空（source=${o.human_minutes_source}，接口返回 minutesSource=${body.minutesSource}${body.minutesError ? ` / ${body.minutesError}` : ""}）`,
+              "AI minutes generated",
+              `human_minutes is empty (source=${o.human_minutes_source}, endpoint returned minutesSource=${body.minutesSource}${body.minutesError ? ` / ${body.minutesError}` : ""})`,
             );
           }
         } else {
-          fail("生成了工单", rec.body.slice(0, 200));
+          fail("Created a work order", rec.body.slice(0, 200));
         }
       } else {
-        fail("recording 回调", `HTTP ${rec.status} ${rec.body.slice(0, 200)}`);
+        fail("recording callback", `HTTP ${rec.status} ${rec.body.slice(0, 200)}`);
       }
     }
     // --- 5. status: can the line take a call right now?
@@ -253,18 +253,18 @@ async function main() {
     let statusBody = {};
     try { statusBody = JSON.parse(statusOut.slice(0, cut)); } catch { /* ignore */ }
     statusCode === 200
-      ? pass("返回 200")
-      : fail("返回 200", `HTTP ${statusCode}`);
+      ? pass("Returned 200")
+      : fail("Returned 200", `HTTP ${statusCode}`);
     statusBody.ok ? pass("ok = true") : fail("ok = true", JSON.stringify(statusBody).slice(0, 160));
     Array.isArray(statusBody.lines) && statusBody.lines.length > 0
-      ? pass("列出了客户线路", statusBody.lines.map((l) => l.companyName).join(", "))
-      : fail("列出了客户线路", "没有 lines");
+      ? pass("Listed the customer lines", statusBody.lines.map((l) => l.companyName).join(", "))
+      : fail("Listed the customer lines", "no lines in the response");
     typeof statusBody.anyLive === "boolean"
-      ? pass("给出是否已开通", `anyLive=${statusBody.anyLive}｜${statusBody.headline || ""}`)
-      : fail("给出是否已开通", "缺少 anyLive");
+      ? pass("Reports whether the line is live", `anyLive=${statusBody.anyLive} | ${statusBody.headline || ""}`)
+      : fail("Reports whether the line is live", "anyLive is missing");
     statusBody.counts && typeof statusBody.counts.humanCalls === "number"
-      ? pass("统计了真人通话数", String(statusBody.counts.humanCalls))
-      : fail("统计了真人通话数", "缺少 counts");
+      ? pass("Counted the human calls", String(statusBody.counts.humanCalls))
+      : fail("Counted the human calls", "counts is missing");
   } finally {
     // --- cleanup ---------------------------------------------------
     for (const id of createdOrderIds) {
@@ -277,11 +277,11 @@ async function main() {
        human_line_enabled = ${original.human_line_enabled},
        human_line_fallback = '${original.human_line_fallback}' where id = '${ALEX_BOSS_ID}';`,
     );
-    console.log(`\n  (已清理测试工单 ${createdOrderIds.length} 条，配置已恢复)`);
+    console.log(`\n  (cleaned up ${createdOrderIds.length} test work order(s); configuration restored)`);
   }
 
   console.log("\n" + "═".repeat(62));
-  console.log(`  结果: ${passed} 通过, ${failed} 失败`);
+  console.log(`  Result: ${passed} passed, ${failed} failed`);
   console.log("═".repeat(62) + "\n");
   process.exit(failed > 0 ? 1 : 0);
 }

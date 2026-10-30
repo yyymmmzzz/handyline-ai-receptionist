@@ -69,22 +69,22 @@ function ok(flag) {
 
 async function main() {
   console.log("═".repeat(62));
-  console.log("  HandyLine 真人接听线 — 就绪状态");
+  console.log("  HandyLine human line — readiness status");
   console.log("═".repeat(62));
 
   // 1. Twilio account
-  console.log("\n[1] Twilio 账号");
+  console.log("\n[1] Twilio account");
   if (!SID || !TOKEN) {
-    console.log("  ✗ .env.local 里没有 TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN");
+    console.log("  ✗ .env.local has no TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN");
   } else {
     const acc = await httpsJson(`https://api.twilio.com/2010-04-01/Accounts/${SID}.json`, {
       headers: { Authorization: `Basic ${Buffer.from(`${SID}:${TOKEN}`).toString("base64")}` },
     });
     const a = acc.body || {};
-    console.log(`  ${ok(acc.status === 200)} 账号可访问 (HTTP ${acc.status})`);
+    console.log(`  ${ok(acc.status === 200)} account reachable (HTTP ${acc.status})`);
     console.log(`    type=${a.type}  status=${a.status}`);
     if (a.type === "Trial") {
-      console.log("    ⚠ Trial 账号：不能发短信/外呼，且 14 天后必须升级");
+      console.log("    ⚠ Trial account: no SMS / outbound calls, and it must be upgraded after 14 days");
     }
 
     const nums = await httpsJson(
@@ -92,12 +92,12 @@ async function main() {
       { headers: { Authorization: `Basic ${Buffer.from(`${SID}:${TOKEN}`).toString("base64")}` } },
     );
     const list = nums.body?.incoming_phone_numbers || [];
-    console.log(`  ${ok(list.length > 0)} 名下号码 ${list.length} 个：${list.map((n) => n.phone_number).join(", ") || "（无）"}`);
-    console.log(`    → 真人线必须有一个自己的 Twilio 号码（Vapi 的 AI 线不算）`);
+    console.log(`  ${ok(list.length > 0)} numbers owned: ${list.length} — ${list.map((n) => n.phone_number).join(", ") || "(none)"}`);
+    console.log(`    → the human line needs its own Twilio number (the Vapi AI line does not count)`);
   }
 
   // 2. Boss configuration
-  console.log("\n[2] 客户配置 (bosses)");
+  console.log("\n[2] Customer configuration (bosses)");
   const bosses = await mgmtQuery(
     `select company_name, country, phone, human_line_enabled, human_line_number,
             human_answer_phone, human_line_ring_seconds, human_line_fallback,
@@ -106,14 +106,14 @@ async function main() {
   );
   for (const b of bosses) {
     console.log(`  · ${b.company_name} (${b.country})`);
-    console.log(`      AI 线: ${b.ai_line_enabled ? "开" : "关"}   真人线: ${b.human_line_enabled ? "开" : "关"}`);
-    console.log(`      真人线号码: ${b.human_line_number || "（未设置）"}`);
-    console.log(`      接听目标手机: ${b.human_answer_phone || "（未设置）"}`);
-    console.log(`      响铃 ${b.human_line_ring_seconds}s / 无人接听 → ${b.human_line_fallback}`);
+    console.log(`      AI line: ${b.ai_line_enabled ? "on" : "off"}   Human line: ${b.human_line_enabled ? "on" : "off"}`);
+    console.log(`      Human line number: ${b.human_line_number || "(not set)"}`);
+    console.log(`      Phone that rings: ${b.human_answer_phone || "(not set)"}`);
+    console.log(`      Rings ${b.human_line_ring_seconds}s / no answer → ${b.human_line_fallback}`);
   }
 
   // 3. Route protection
-  console.log("\n[3] 回调接口签名校验");
+  console.log("\n[3] Callback signature checks");
   const routes = [
     "src/app/api/human-line/voice/route.ts",
     "src/app/api/human-line/recording/route.ts",
@@ -129,14 +129,14 @@ async function main() {
   }
 
   // 4. Human calls so far
-  console.log("\n[4] 已产生的真人通话");
+  console.log("\n[4] Human calls so far");
   const calls = await mgmtQuery(
     `select call_type, count(*)::int as n from work_orders group by 1 order by 2 desc;`,
   );
   for (const c of calls) console.log(`  · ${c.call_type}: ${c.n}`);
 
   console.log("\n" + "═".repeat(62));
-  console.log("  结论见上面各项 ✓ / ✗");
+  console.log("  Read the ✓ / ✗ lines above for the verdict");
   console.log("═".repeat(62) + "\n");
 }
 

@@ -8,6 +8,9 @@
  *   - bosses.twilio_phone_number  (Twilio's number for this customer)
  *   - bosses.human_line_enabled   (the switch the voice webhook checks)
  *   - .env.local TWILIO_PHONE_NUMBER (so SMS notifications use the same line)
+ *   - .env.local HUMAN_LINE_NUMBER  (so the guard below can tell the human
+ *     line apart from the Vapi AI line — both are Twilio numbers, and the AI
+ *     line must never be dialled as the human line or the customer loops)
  *
  * Usage:
  *   node scripts/activate-human-line.js +15125550123
@@ -72,22 +75,22 @@ const number = argv.find((a) => a.startsWith("+"));
 (async () => {
   if (disable) {
     await mgmtQuery(`update bosses set human_line_enabled = false where id = '${ALEX_BOSS_ID}';`);
-    console.log("✓ 真人线已关闭 (human_line_enabled = false)");
-    console.log("  号码保留在 human_line_number，随时可以再打开。");
+    console.log("✓ Human line disabled (human_line_enabled = false)");
+    console.log("  The number stays in human_line_number, so it can be switched back on.");
     return;
   }
 
   if (!number) {
-    console.error("✗ 用法: node scripts/activate-human-line.js <E.164 号码，例如 +15125550123>");
-    console.error("   号码必须是在你这个 Twilio 账号名下买到的那个。");
+    console.error("✗ Usage: node scripts/activate-human-line.js <E.164 number, e.g. +15125550123>");
+    console.error("   The number must be one you bought on this Twilio account.");
     process.exit(1);
   }
   if (!/^\+[1-9]\d{7,14}$/.test(number)) {
-    console.error(`✗ "${number}" 不是合法的 E.164 号码`);
+    console.error(`✗ "${number}" is not a valid E.164 number`);
     process.exit(1);
   }
   if (fallback && !["ai", "voicemail", "hangup"].includes(fallback)) {
-    console.error(`✗ --fallback 只能是 ai / voicemail / hangup`);
+    console.error(`✗ --fallback must be one of ai / voicemail / hangup`);
     process.exit(1);
   }
 
@@ -95,7 +98,7 @@ const number = argv.find((a) => a.startsWith("+"));
   // mistake here, and pointing the human line at it would loop the customer.
   const VAPI_AI_LINE = get("TWILIO_PHONE_NUMBER");
   if (VAPI_AI_LINE && number === VAPI_AI_LINE && !get("HUMAN_LINE_NUMBER")) {
-    console.error(`✗ "${number}" 看起来是 Vapi 的 AI 线号码，不能同时当真人线（会形成回环）。`);
+    console.error(`✗ "${number}" looks like the Vapi AI line number — it cannot also be the human line (that would loop the customer).`);
     process.exit(1);
   }
 
@@ -108,17 +111,19 @@ const number = argv.find((a) => a.startsWith("+"));
   const res = await mgmtQuery(
     `update bosses set ${sets.join(", ")} where id = '${ALEX_BOSS_ID}' returning company_name, human_line_number, human_line_enabled, human_line_fallback;`,
   );
-  console.log("✓ 数据库已更新:");
+  console.log("✓ Database updated:");
   console.log("  ", JSON.stringify(res[0]));
 
   setEnv("TWILIO_PHONE_NUMBER", number);
-  console.log("✓ .env.local 的 TWILIO_PHONE_NUMBER 已更新（短信通知用同一号码）");
+  setEnv("HUMAN_LINE_NUMBER", number);
+  console.log("✓ TWILIO_PHONE_NUMBER in .env.local updated (SMS notifications use the same number)");
+  console.log("✓ HUMAN_LINE_NUMBER in .env.local updated (marks the human line vs the Vapi AI line)");
 
-  console.log("\n接下来在 Twilio 控制台设置这两个地址（每个号码一次）：");
+  console.log("\nNext, set these two URLs in the Twilio console (once per number):");
   console.log(`  1. A CALL COMES IN  → ${APP_URL}/api/human-line/voice`);
   console.log(`  2. RECORDING STATUS → ${APP_URL}/api/human-line/recording`);
-  console.log("\n设置好后跑 node scripts/check-human-line.js 复查，");
-  console.log("再打这个号码：接听应转给 Alex，通话结束后录音会进网站。");
+  console.log("\nWhen that is done, re-run node scripts/check-human-line.js to verify,");
+  console.log("then call the number: the call should reach Alex, and the recording should land on the site after the call ends.");
 })().catch((e) => {
   console.error("✗", e.message);
   process.exit(1);
