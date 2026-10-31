@@ -19,6 +19,9 @@ import { notifyBossOfNewOrder } from "@/lib/notify";
  *   4. If outbound_attempts reaches max_attempts (default 3), fall back to SMS
  */
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   // Auth is MANDATORY, and it fails closed.
   //
@@ -134,5 +137,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ retried: results.length, results });
 }
-
-export const dynamic = "force-dynamic";

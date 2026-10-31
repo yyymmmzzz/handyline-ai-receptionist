@@ -1,5 +1,6 @@
 import type { WorkOrder } from "./types";
 import { getServiceClient } from "./supabase";
+import { logNotification } from "./notify";
 import twilio from "twilio";
 
 /**
@@ -54,10 +55,28 @@ export async function placeEmergencyCall(
   const publicUrl = process.env.NEXT_PUBLIC_APP_URL;
 
   if (!accountSid || !authToken || !fromNumber) {
-    return { success: false, error: "twilio_not_configured" };
+    const reason = "twilio_not_configured";
+    await logNotification(
+      order.id,
+      "voice",
+      boss.phone,
+      `Emergency call about job ${order.id}`,
+      "failed",
+      reason,
+    );
+    return { success: false, error: reason };
   }
   if (!publicUrl) {
-    return { success: false, error: "NEXT_PUBLIC_APP_URL not set" };
+    const reason = "NEXT_PUBLIC_APP_URL not set";
+    await logNotification(
+      order.id,
+      "voice",
+      boss.phone,
+      `Emergency call about job ${order.id}`,
+      "failed",
+      reason,
+    );
+    return { success: false, error: reason };
   }
 
   // Stash the work order id so the TwiML + decision endpoints can find it
@@ -81,10 +100,31 @@ export async function placeEmergencyCall(
       record: false,
     });
 
+    await logNotification(
+      order.id,
+      "voice",
+      boss.phone,
+      `Emergency call about job ${order.id}`,
+      "sent",
+      null,
+      call.sid,
+    );
     return { success: true, callId: call.sid };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[emergency] Twilio call failed: ${msg}`);
+    // Log the failure too — a voice attempt that never connected used to
+    // leave no trace, so the dashboard could not distinguish "called and it
+    // failed" from "never tried". The SMS path has been logged this way
+    // since 2026-10-31; the voice path had to catch up.
+    await logNotification(
+      order.id,
+      "voice",
+      boss.phone,
+      `Emergency call about job ${order.id}`,
+      "failed",
+      msg,
+    );
     return { success: false, error: msg };
   }
 }

@@ -38,11 +38,11 @@ function DashboardPageInner() {
   })();
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  // Notification deliveries that failed. The notifications table was
+  // Notification deliveries, newest first. The notifications table was
   // write-only until 2026-10-31 — every attempt was logged and nothing ever
   // read it, so when the Twilio trial expired and all 80 notifications
   // failed, the dashboard still showed the jobs as if all was well.
-  const [failedNotifications, setFailedNotifications] = useState<NotificationRecord[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [countryFilter, setCountryFilter] = useState<CountryFilter>(initialCountry);
@@ -108,53 +108,61 @@ function DashboardPageInner() {
   // broken notification channel cannot fail silently again: if the boss is
   // not being told about a job, that fact has to be on screen, not buried in
   // a table nobody opens.
+  //
+  // ALL statuses are fetched, not just failures: whether a job is currently
+  // undelivered depends on its LATEST attempt, not on whether it ever
+  // failed. A job that failed twice and then succeeded was delivered.
   useEffect(() => {
     const supabase = getBrowserClient();
     supabase
       .from("notifications")
       .select("id, work_order_id, channel, recipient, message, status, error, created_at")
-      .eq("status", "failed")
+      .not("work_order_id", "is", null)
       .order("created_at", { ascending: false })
-      .limit(200)
+      .limit(1000)
       .then(({ data, error }) => {
         if (error) {
-          console.error("[dashboard] Failed to load notification failures:", error);
+          console.error("[dashboard] Failed to load notifications:", error);
           return;
         }
-        setFailedNotifications((data || []) as NotificationRecord[]);
+        setNotifications((data || []) as NotificationRecord[]);
       });
   }, []);
 
-  // One entry per job, newest first. A job whose notification failed three
-  // times is one undelivered job, not three.
-  const undelivered = useMemo(() => {
-    const seen = new Set<string>();
-    const out: { id: string; at: string; cause: string }[] = [];
-    for (const n of failedNotifications) {
-      if (!n.work_order_id || seen.has(n.work_order_id)) continue;
-      seen.add(n.work_order_id);
-      out.push({ id: n.work_order_id, at: n.created_at, cause: notificationErrorLabel(n.error) });
+  // The latest delivery attempt per job. The list is sorted newest first,
+  // so the first row seen for an order is the one that counts.
+  const latestDelivery = useMemo(() => {
+    const map = new Map<string, NotificationRecord>();
+    for (const n of notifications) {
+      if (!n.work_order_id) continue;
+      if (!map.has(n.work_order_id)) map.set(n.work_order_id, n);
     }
-    return out;
-  }, [failedNotifications]);
+    return map;
+  }, [notifications]);
 
-  // Jobs that are still open AND were never delivered — these are the live
-  // risk. Closed jobs that failed earlier are counted separately so the
-  // banner does not cry wolf over history.
+  // Jobs whose most recent delivery attempt failed — that is the live risk.
+  // Closed jobs are excluded so the banner does not cry wolf over history.
   //
   // Production only: demo and test records are not lost business, and mixing
   // them in would bury the real number under noise.
-  const openUndelivered = useMemo(() => {
+  const undelivered = useMemo(() => {
     const byId = new Map(orders.map((o) => [o.id, o]));
-    return undelivered.filter((u) => {
-      const o = byId.get(u.id);
-      if (!o) return false;
-      if (o.status === "completed" || o.status === "cancelled") return false;
-      return (o.data_source || "production") === "production";
-    });
-  }, [undelivered, orders]);
+    const out: { id: string; at: string; cause: string }[] = [];
+    for (const [orderId, n] of latestDelivery) {
+      if (n.status !== "failed") continue;
+      const o = byId.get(orderId);
+      if (!o) continue;
+      if (o.status === "completed" || o.status === "cancelled") continue;
+      if ((o.data_source || "production") !== "production") continue;
+      out.push({ id: orderId, at: n.created_at, cause: notificationErrorLabel(n.error) });
+    }
+    return out.sort((a, b) => (a.at < b.at ? 1 : -1));
+  }, [latestDelivery, orders]);
 
-  const undeliveredIds = useMemo(() => new Set(undelivered.map((u) => u.id)), [undelivered]);
+  const undeliveredIds = useMemo(
+    () => new Set(undelivered.map((u) => u.id)),
+    [undelivered],
+  );
 
   // Apply both filters (status + data source + call type)
   const filtered = orders.filter((o) => {
@@ -223,19 +231,19 @@ function DashboardPageInner() {
       {/* Undelivered job notifications — these jobs exist, but the boss was
           never told about them. Until this banner existed, that failure was
           completely invisible. */}
-      {openUndelivered.length > 0 && (
+      {undelivered.length > 0 && (
         <div className="mb-6 rounded-lg border border-red-300 bg-red-50 px-4 py-3">
           <div className="flex items-start gap-3">
             <span className="text-base leading-none mt-0.5">🔕</span>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-red-900">
-                {openUndelivered.length} open job{openUndelivered.length === 1 ? "" : "s"} never reached the boss
+                {undelivered.length} open job{undelivered.length === 1 ? "" : "s"} never reached the boss
               </div>
               <div className="text-xs text-red-800 mt-0.5">
-                {openUndelivered[0].cause} · last attempt {relativeTime(openUndelivered[0].at)}
+                {undelivered[0].cause} · last attempt {relativeTime(undelivered[0].at)}
               </div>
               <div className="mt-2 space-y-1">
-                {openUndelivered.slice(0, 5).map((u) => {
+                {undelivered.slice(0, 5).map((u) => {
                   const o = orders.find((x) => x.id === u.id);
                   return (
                     <Link
@@ -247,9 +255,9 @@ function DashboardPageInner() {
                     </Link>
                   );
                 })}
-                {openUndelivered.length > 5 && (
+                {undelivered.length > 5 && (
                   <div className="text-xs text-red-700">
-                    + {openUndelivered.length - 5} more
+                    + {undelivered.length - 5} more
                   </div>
                 )}
               </div>

@@ -1,0 +1,56 @@
+name: Emergency retry
+
+# WHY THIS EXISTS (2026-10-31)
+# ---------------------------
+# /api/cron/emergency-retry re-dials the boss for an urgent job he did not
+# answer, every 5 minutes, up to 3 attempts, and then falls back to SMS.
+#
+# It was NEVER actually scheduled. The route says "schedule: every 5
+# minutes", but it was not in vercel.json — and it could not have been:
+#
+#   - Vercel Hobby allows cron jobs to run ONCE PER DAY. An expression like
+#     */5 * * * * is rejected at deploy time with "Hobby accounts are
+#     limited to daily cron jobs."
+#   - The route is POST-only, while Vercel Cron always issues GET.
+#
+# GitHub Actions is the free scheduler that fits: its shortest allowed
+# interval is exactly 5 minutes, and it can POST.
+#
+# SETUP (one step, in GitHub):
+#   Repo → Settings → Secrets and variables → Actions → New repository
+#   secret → name CRON_SECRET → value = the same CRON_SECRET the app uses.
+#
+# Without that secret the endpoint refuses to run (it fails closed — an
+# unauthenticated caller must not be able to place outbound calls), so this
+# workflow does nothing at all until the secret is there. That is the
+# intended behaviour, not a bug.
+
+on:
+  schedule:
+    # Every 5 minutes, UTC. GitHub may delay a scheduled run by a few
+    # minutes under load — the endpoint is written to be idempotent, so a
+    # late or repeated run only costs a redundant dial attempt.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Trigger the emergency retry
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://demo-navy-chi-47.vercel.app' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::warning::CRON_SECRET is not set in this repository's Actions secrets — skipping."
+            exit 0
+          fi
+          echo "→ POST $APP_URL/api/cron/emergency-retry"
+          curl -sS --http1.1 --max-time 60 -X POST \
+            "$APP_URL/api/cron/emergency-retry" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+          echo

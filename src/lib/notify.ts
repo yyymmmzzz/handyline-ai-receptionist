@@ -10,13 +10,28 @@ let twilioCheck: { ok: boolean; reason: string } | null = null;
 /**
  * Check once per process whether this Twilio account can actually send SMS.
  *
- * Two things silently break SMS in this account:
- *   - a Trial that has expired ("Your Trial account has expired")
+ * Three things silently break SMS in this account:
+ *   - an expired trial ("Your Trial account has expired")
  *   - a `from` number that Twilio does not own (the AI line lives on Vapi,
  *     so sending "from" it through Twilio can never work)
+ *   - missing credentials
  *
- * Without this probe the only symptom is a cryptic Twilio error in the
- * notifications table, which nobody reads.
+ * WITHOUT THIS PROBE the only symptom is a cryptic Twilio error in the
+ * notifications table — and before 2026-10-31 nothing read that table, so
+ * the account could fail to deliver for seven weeks without a trace.
+ *
+ * WHY THE TRIAL IS PROBED THROUGH THE CALLS API
+ * --------------------------------------------
+ * `GET /Accounts/{sid}` still reports `status: active` after the trial
+ * expires, so the account object is not a reliable signal. The Calls API is
+ * where the expiry actually surfaces:
+ *
+ *   HTTP 401  Your Trial account has expired. Please upgrade your account.
+ *
+ * That probe is attempted FIRST, because an expired trial also breaks the
+ * number-ownership check in a misleading way — the ownership failure is a
+ * symptom of the trial being over, not the cause. Reporting the root cause
+ * saves the operator from chasing a number problem that does not exist.
  */
 async function checkTwilioReady(): Promise<{ ok: boolean; reason: string }> {
   if (twilioCheck) return twilioCheck;
@@ -36,11 +51,20 @@ async function checkTwilioReady(): Promise<{ ok: boolean; reason: string }> {
 
   try {
     const client = twilio(accountSid, authToken);
-    const account = await client.api.v2010.accounts(accountSid).fetch();
-    if (account.type === "Trial" && account.status !== "active") {
-      twilioCheck = { ok: false, reason: `twilio_trial_${account.status}` };
-      return twilioCheck;
+
+    // 1. Is the trial over? (only this exact failure is fatal — any other
+    //    error here is a probe hiccup, not a verdict)
+    try {
+      await client.api.v2010.accounts(accountSid).calls.list({ limit: 1 });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/trial account has expired/i.test(msg)) {
+        twilioCheck = { ok: false, reason: "twilio_trial_expired" };
+        return twilioCheck;
+      }
     }
+
+    // 2. Does this account own the number we send from?
     const numbers = await client.incomingPhoneNumbers.list({ limit: 20 });
     const owned = numbers.filter((n: { phoneNumber: string }) => n.phoneNumber === fromNumber);
     if (owned.length === 0) {
@@ -199,6 +223,67 @@ export async function initiateCallback(order: WorkOrder): Promise<void> {
 }
 
 /**
+ * Tell the boss about SEVERAL jobs in ONE message.
+ *
+ * WHY A DIGEST EXISTS
+ * -------------------
+ * When the Twilio trial expired, 26 open production jobs went unnotified.
+ * Replaying them one SMS at a time would bury the merchant under 26 texts
+ * and train him to ignore the number. One message that lists all of them
+ * is both cheaper and more likely to be read.
+ *
+ * The digest is logged once per included job, not once in total: each job's
+ * detail page must be able to show whether the boss was told about THAT job,
+ * and the dashboard decides "undelivered" from each job's own latest
+ * delivery attempt.
+ */
+export async function notifyBossOfMissedJobs(
+  boss: Boss,
+  orders: WorkOrder[],
+): Promise<void> {
+  if (!orders.length) return;
+
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+  const message = formatMissedJobsDigest(boss, orders);
+
+  if (!accountSid || !authToken || !fromNumber) {
+    for (const o of orders) {
+      await logNotification(o.id, "sms", boss.phone, message, "failed", "twilio_not_configured");
+    }
+    return;
+  }
+
+  const ready = await checkTwilioReady();
+  if (!ready.ok) {
+    console.error(`[notify] Twilio cannot send SMS — ${ready.reason}. The boss was NOT notified.`);
+    for (const o of orders) {
+      await logNotification(o.id, "sms", boss.phone, message, "failed", ready.reason);
+    }
+    return;
+  }
+
+  try {
+    const client = twilio(accountSid, authToken);
+    const result = await client.messages.create({
+      body: message,
+      from: fromNumber,
+      to: boss.phone,
+    });
+    for (const o of orders) {
+      await logNotification(o.id, "sms", boss.phone, message, "sent", null, result.sid);
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error("[notify] Missed-jobs digest failed:", errMsg);
+    for (const o of orders) {
+      await logNotification(o.id, "sms", boss.phone, message, "failed", errMsg);
+    }
+  }
+}
+
+/**
  * Format the SMS message based on decision type.
  */
 function formatSms(boss: Boss, order: WorkOrder): string {
@@ -236,7 +321,44 @@ function formatSms(boss: Boss, order: WorkOrder): string {
   return lines.join("\n");
 }
 
-async function logNotification(
+/**
+ * Build one compact message listing several jobs the boss was never told
+ * about.
+ *
+ * Kept deliberately short: a 26-line SMS is close to the carrier limit and
+ * nobody reads it. Each line carries what the merchant needs to act — what
+ * the job is, who wants it, and the phone number to call back.
+ */
+function formatMissedJobsDigest(boss: Boss, orders: WorkOrder[]): string {
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  const lines = orders.map((o, i) => {
+    const what = o.summary || o.issue_type || "New job";
+    const who = o.customer_name || o.customer_name_extracted || "customer";
+    return `${i + 1}. ${what} — ${who} ${o.customer_phone}`;
+  });
+
+  return [
+    `📬 ${orders.length} job${orders.length === 1 ? "" : "s"} you were never told about — ${boss.company_name}`,
+    ...lines,
+    `Open: ${appUrl}/?source=production`,
+  ].join("\n");
+}
+
+/**
+ * Write one row to the delivery log.
+ *
+ * EXPORTED (2026-10-31) so the emergency voice path can log its own
+ * failures into the same table — a voice call that never connected used to
+ * leave no trace at all, so the dashboard could not tell "we called and it
+ * failed" from "we never tried".
+ *
+ * The insert error is checked on purpose. The Supabase client RESOLVES with
+ * `{ error }` instead of rejecting, so a missing column or a bad payload
+ * used to disappear silently — which is exactly how the `external_id`
+ * column could be missing for months while every successful delivery was
+ * dropped on the floor.
+ */
+export async function logNotification(
   workOrderId: string,
   channel: string,
   recipient: string,
@@ -247,7 +369,7 @@ async function logNotification(
 ): Promise<void> {
   try {
     const supabase = getServiceClient();
-    await supabase.from("notifications").insert({
+    const { error: insertError } = await supabase.from("notifications").insert({
       work_order_id: workOrderId,
       channel,
       recipient,
@@ -256,6 +378,11 @@ async function logNotification(
       error,
       ...(externalId ? { external_id: externalId } : {}),
     });
+    if (insertError) {
+      console.error(
+        `[notify] Failed to log notification (${channel}/${status}): ${insertError.message}`,
+      );
+    }
   } catch (err) {
     console.error("[notify] Failed to log notification:", err);
   }
