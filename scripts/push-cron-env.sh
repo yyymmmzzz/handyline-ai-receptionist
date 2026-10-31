@@ -17,15 +17,14 @@
 #   ./scripts/push-cron-env.sh
 #
 # Usage:
-#   ./scripts/push-cron-env.sh              # push the two vars
-#   ./scripts/push-cron-env.sh --redeploy   # push them AND redeploy (needed
-#                                           # for the running app to see them)
+#   ./scripts/push-cron-env.sh              # login if needed, push, redeploy
+#   ./scripts/push-cron-env.sh --no-redeploy   # push without rolling a new build
 #   ./scripts/push-cron-env.sh --verify     # just check the current state
 #
 # Notes:
 #   - Vercel bakes env vars into each deployment, so adding them does not
-#     change the currently live deployment. Use --redeploy (or push any commit)
-#     to roll a new deployment that has them.
+#     change the currently live deployment. The default redeploy is what
+#     actually makes them take effect.
 #   - The values are never printed and never leave .env.local except as
 #     Vercel env vars.
 
@@ -75,24 +74,43 @@ if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
 fi
 
 echo "→ Checking Vercel login…"
-if ! npx --yes vercel@latest whoami >/dev/null 2>&1; then
-  echo "✗ Not logged in to Vercel."
+if [ -n "${VERCEL_TOKEN:-}" ]; then
+  echo "  ✓ using VERCEL_TOKEN from the environment"
+  VERCEL_AUTH=(--token "$VERCEL_TOKEN")
+elif npx --yes vercel@latest whoami >/dev/null 2>&1; then
+  echo "  ✓ logged in as $(npx --yes vercel@latest whoami 2>/dev/null | head -1)"
+  VERCEL_AUTH=()
+else
+  # Not logged in. Log in HERE, in this terminal, so the device code is
+  # generated seconds before it is used.
+  #
+  # WHY NOT print a code and paste it into a chat: the Vercel device code is
+  # only valid for 10 minutes (expires_in = 600). A code handed over in a
+  # message is stale long before a human gets around to opening it, and the
+  # page then says "invalid" even though the code was copied correctly.
+  #
+  # Running the login here means: the code appears on screen, the URL right
+  # below it, and the CLI stays alive in this same terminal while it waits.
+  echo "  → Not logged in. Starting the login flow in this terminal."
   echo
-  echo "  Run this once, then come back:"
+  echo "    1. A URL will print below, like:"
+  echo "       https://vercel.com/oauth/device?user_code=XXXX-XXXX"
+  echo "    2. Open THAT exact url in the browser you use for Vercel."
+  echo "    3. Approve it. The code is valid for 10 minutes."
   echo
-  echo "      npx vercel login"
+  npx --yes vercel@latest login
   echo
-  echo "  It prints a URL like https://vercel.com/oauth/device?user_code=XXXX-XXXX"
-  echo "  — open it in the browser you are logged into Vercel with and approve."
-  echo "  The credentials land in this machine's CLI profile, so afterwards"
-  echo "  ./scripts/push-cron-env.sh just works."
-  exit 1
+  if ! npx --yes vercel@latest whoami >/dev/null 2>&1; then
+    echo "✗ Login did not complete — nothing was pushed."
+    exit 1
+  fi
+  echo "  ✓ logged in as $(npx --yes vercel@latest whoami 2>/dev/null | head -1)"
+  VERCEL_AUTH=()
 fi
-echo "  ✓ logged in as $(npx --yes vercel@latest whoami 2>/dev/null | head -1)"
 
 if [ ! -f "$ROOT/.vercel/project.json" ]; then
   echo "→ Project not linked, linking to '$PROJECT_NAME'…"
-  npx --yes vercel@latest link --yes --project "$PROJECT_NAME"
+  npx --yes vercel@latest "${VERCEL_AUTH[@]}" link --yes --project "$PROJECT_NAME"
 fi
 
 # ------------------------------------------------------------------- the push
@@ -100,19 +118,24 @@ echo
 echo "→ Pushing 2 env vars to Vercel project '$PROJECT_NAME' (production)"
 echo
 
-printf '%s' "$CRON_SECRET"           | npx --yes vercel@latest env add CRON_SECRET           production --force --sensitive
-printf '%s' "$SUPABASE_ACCESS_TOKEN" | npx --yes vercel@latest env add SUPABASE_ACCESS_TOKEN production --force --sensitive
+printf '%s' "$CRON_SECRET"           | npx --yes vercel@latest "${VERCEL_AUTH[@]}" env add CRON_SECRET           production --force --sensitive
+printf '%s' "$SUPABASE_ACCESS_TOKEN" | npx --yes vercel@latest "${VERCEL_AUTH[@]}" env add SUPABASE_ACCESS_TOKEN production --force --sensitive
 
 echo
 echo "✓ Env vars pushed."
 
 # ------------------------------------------------------------------ redeploy
-if [ "$MODE" = "--redeploy" ]; then
+# Env vars are baked into each Vercel deployment, so the running app only
+# sees them after a new deployment exists. A redeploy is therefore the
+# DEFAULT, not an extra step — push one empty commit and let the GitHub
+# auto-deploy roll a new build. Use --no-redeploy to skip it.
+if [ "$MODE" != "--no-redeploy" ]; then
   echo "→ Triggering a redeploy (Vercel bakes env vars per deployment)…"
   cd "$ROOT"
   git commit --allow-empty -m "chore: redeploy so the new env vars take effect"
   git push origin main
-  echo "  Pushed. Wait ~2 minutes for the build, then run:"
+  echo "  Pushed. The build takes ~2 minutes."
+  echo "  Then check it with:"
   echo "      ./scripts/push-cron-env.sh --verify"
   exit 0
 fi

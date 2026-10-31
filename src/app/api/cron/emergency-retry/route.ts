@@ -20,10 +20,36 @@ import { notifyBossOfNewOrder } from "@/lib/notify";
  */
 
 export async function POST(req: NextRequest) {
-  // Optional shared-secret check for cron callers
-  const authHeader = req.headers.get("authorization");
+  // Auth is MANDATORY, and it fails closed.
+  //
+  // The old check was `if (cronSecret && authHeader !== ...)` — which meant
+  // that with CRON_SECRET unset the whole comparison was skipped and the
+  // endpoint was callable by anyone on the internet. It is not a harmless
+  // read-only endpoint: it places outbound calls to the boss. Verified on
+  // 2026-10-31 — an unauthenticated POST ran and retried 16 urgent orders.
+  //
+  // Vercel Cron sends `Authorization: Bearer $CRON_SECRET` whenever
+  // CRON_SECRET is set on the project, so requiring it costs the cron
+  // nothing once the variable is configured.
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    console.error(
+      "[cron] CRON_SECRET is not set — refusing to run. This endpoint places " +
+        "outbound calls and must not be publicly callable.",
+    );
+    return NextResponse.json(
+      {
+        error: "cron_secret_not_configured",
+        hint:
+          "Set CRON_SECRET in the Vercel environment. Vercel Cron then sends it " +
+          "as 'Authorization: Bearer $CRON_SECRET'.",
+      },
+      { status: 503 },
+    );
+  }
+
+  const authHeader = req.headers.get("authorization");
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
