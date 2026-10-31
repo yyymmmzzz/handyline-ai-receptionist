@@ -101,3 +101,39 @@ export function aiQualityColor(flags: string | null | undefined): string {
     ? "bg-red-100 text-red-800 border-red-200"
     : "bg-gray-100 text-gray-800 border-gray-200";
 }
+
+/**
+ * Turn a raw delivery error into something an operator can act on.
+ *
+ * The `notifications` table stores whatever Twilio said. That string is
+ * accurate but not actionable — "twilio_from_not_owned:+17243620422" does not
+ * tell the operator that the account needs a number it owns. The known
+ * failure modes each get a plain-English cause; anything unrecognised is
+ * passed through unchanged rather than hidden.
+ */
+export function notificationErrorLabel(error: string | null | undefined): string {
+  if (!error) return "Unknown error";
+  const e = error.toLowerCase();
+  if (e.startsWith("twilio_from_not_owned"))
+    return "The sending number is not owned by this Twilio account";
+  if (e.includes("trial account has expired"))
+    return "The Twilio trial has expired — the account must be upgraded";
+  if (e.includes("no twilio trial phone number"))
+    return "Twilio has no usable sending number on this account";
+  if (e.startsWith("twilio_trial"))
+    return "Twilio is still on a trial account";
+  if (e.startsWith("twilio_not_configured"))
+    return "Twilio credentials are missing";
+  if (e.startsWith("twilio_credentials_missing"))
+    return "Twilio credentials are missing";
+  if (e.startsWith("twilio_from_number_missing"))
+    return "No sending number is configured";
+  if (e.startsWith("twilio_probe_failed"))
+    return "Twilio could not be reached";
+  return error;
+}
+
+/** Whether a notification row represents a delivery that never happened. */
+export function notificationFailed(status: string | null | undefined): boolean {
+  return status === "failed";
+}

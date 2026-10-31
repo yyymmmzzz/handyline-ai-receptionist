@@ -325,3 +325,31 @@ export interface GetPriceQuoteResult {
   total_high?: number;
   currency_symbol?: string;  // '$' | 'S$' | 'RM' | 'Rp'
 }
+
+// =====================================================
+// Notification delivery records
+// =====================================================
+
+/**
+ * One row of the `notifications` table — the delivery log for every attempt
+ * to tell the boss about a job.
+ *
+ * WHY THIS IS A FIRST-CLASS TYPE (2026-10-31)
+ * -------------------------------------------
+ * The table was write-only for its whole life: `notify.ts` logged every
+ * attempt, and NOTHING ever read it back. So when the Twilio trial expired
+ * and all 80 notifications failed, the only trace of that was a log table
+ * nobody opened — the dashboard showed the jobs as if everything was fine and
+ * the merchant was never told. A delivery log you cannot see is not a
+ * delivery log, it is a diary.
+ */
+export interface NotificationRecord {
+  id?: string;
+  work_order_id: string | null;
+  channel: string;
+  recipient: string | null;
+  message: string | null;
+  status: string;
+  error: string | null;
+  created_at: string;
+}

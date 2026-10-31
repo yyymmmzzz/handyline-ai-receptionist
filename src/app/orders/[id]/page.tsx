@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { getBrowserClient } from "@/lib/supabase";
-import { decisionLabel, decisionColor, statusLabel, statusColor, formatDateTime, cn, aiQualityLabel } from "@/lib/utils";
-import type { WorkOrder, Boss, PricingBreakdown } from "@/lib/types";
+import { decisionLabel, decisionColor, statusLabel, statusColor, formatDateTime, cn, aiQualityLabel, notificationErrorLabel } from "@/lib/utils";
+import type { WorkOrder, Boss, PricingBreakdown, NotificationRecord } from "@/lib/types";
 
 export default function WorkOrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -18,6 +18,8 @@ export default function WorkOrderDetailPage() {
   // Which action items from the AI meeting minutes the operator has ticked off.
   // Local only — these are working notes, not order state.
   const [doneActions, setDoneActions] = useState<Record<string, boolean>>({});
+  // Every attempt to notify the boss about THIS job, newest first.
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
 
   useEffect(() => {
     const supabase = getBrowserClient();
@@ -65,6 +67,30 @@ export default function WorkOrderDetailPage() {
       setLoading(false);
     })();
 
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  // Delivery log for this job. If the boss was never told about it, that has
+  // to be visible here — not just in a log table.
+  useEffect(() => {
+    const supabase = getBrowserClient();
+    let cancelled = false;
+    supabase
+      .from("notifications")
+      .select("id, work_order_id, channel, recipient, message, status, error, created_at")
+      .eq("work_order_id", id)
+      .order("created_at", { ascending: false })
+      .limit(20)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("[detail] Failed to load notifications:", error);
+          return;
+        }
+        setNotifications((data || []) as NotificationRecord[]);
+      });
     return () => {
       cancelled = true;
     };
@@ -148,6 +174,13 @@ export default function WorkOrderDetailPage() {
             <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
               <span className="font-semibold">AI misbehaved on this call:</span>{" "}
               {aiQualityLabel(order.ai_quality_flag)}. Listen to the recording before trusting this one.
+            </div>
+          )}
+          {notifications[0]?.status === "failed" && (
+            <div className="mb-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
+              <span className="font-semibold">The boss was never notified about this job.</span>{" "}
+              {notificationErrorLabel(notifications[0].error)} — last attempt{" "}
+              {formatDateTime(notifications[0].created_at)}.
             </div>
           )}
           <h1 className="text-2xl font-bold text-gray-900">
@@ -489,6 +522,47 @@ export default function WorkOrderDetailPage() {
               </>
             );
           })()}
+        </Section>
+      )}
+
+      {/* Notification delivery — did the boss actually get told? */}
+      {notifications.length > 0 && (
+        <Section title="Notifications">
+          {notifications.map((n, i) => {
+            const failed = n.status === "failed";
+            return (
+              <div
+                key={n.id || `${n.created_at}-${i}`}
+                className={cn(
+                  "rounded-md border px-3 py-2",
+                  failed ? "bg-red-50 border-red-200" : "bg-emerald-50 border-emerald-200",
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span
+                    className={cn(
+                      "text-xs font-semibold",
+                      failed ? "text-red-800" : "text-emerald-800",
+                    )}
+                  >
+                    {failed ? "🔕 Not delivered" : "✅ Delivered"} · {n.channel}
+                  </span>
+                  <span className="text-xs text-gray-500">{formatDateTime(n.created_at)}</span>
+                </div>
+                {n.recipient && (
+                  <div className="text-xs text-gray-600 mt-0.5">to {n.recipient}</div>
+                )}
+                {failed && n.error && (
+                  <div className="text-xs text-red-700 mt-1">
+                    {notificationErrorLabel(n.error)}
+                    {n.error !== notificationErrorLabel(n.error) && (
+                      <span className="text-red-500"> ({n.error})</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </Section>
       )}
 

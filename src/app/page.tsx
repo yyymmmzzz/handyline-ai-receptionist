@@ -1,11 +1,11 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getBrowserClient } from "@/lib/supabase";
-import { decisionLabel, decisionColor, statusLabel, statusColor, relativeTime, formatDateTime, aiQualityLabel } from "@/lib/utils";
-import type { WorkOrder } from "@/lib/types";
+import { decisionLabel, decisionColor, statusLabel, statusColor, relativeTime, formatDateTime, aiQualityLabel, notificationErrorLabel } from "@/lib/utils";
+import type { WorkOrder, NotificationRecord } from "@/lib/types";
 
 type DataSource = "demo" | "production" | "test";
 type StatusFilter = "all" | "urgent" | "pending" | "callback";
@@ -38,6 +38,11 @@ function DashboardPageInner() {
   })();
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  // Notification deliveries that failed. The notifications table was
+  // write-only until 2026-10-31 — every attempt was logged and nothing ever
+  // read it, so when the Twilio trial expired and all 80 notifications
+  // failed, the dashboard still showed the jobs as if all was well.
+  const [failedNotifications, setFailedNotifications] = useState<NotificationRecord[]>([]);
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [countryFilter, setCountryFilter] = useState<CountryFilter>(initialCountry);
@@ -96,6 +101,55 @@ function DashboardPageInner() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // Read the delivery log back.
+  //
+  // This is the only place the app looks at `notifications`. It exists so a
+  // broken notification channel cannot fail silently again: if the boss is
+  // not being told about a job, that fact has to be on screen, not buried in
+  // a table nobody opens.
+  useEffect(() => {
+    const supabase = getBrowserClient();
+    supabase
+      .from("notifications")
+      .select("id, work_order_id, channel, recipient, message, status, error, created_at")
+      .eq("status", "failed")
+      .order("created_at", { ascending: false })
+      .limit(200)
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("[dashboard] Failed to load notification failures:", error);
+          return;
+        }
+        setFailedNotifications((data || []) as NotificationRecord[]);
+      });
+  }, []);
+
+  // One entry per job, newest first. A job whose notification failed three
+  // times is one undelivered job, not three.
+  const undelivered = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { id: string; at: string; cause: string }[] = [];
+    for (const n of failedNotifications) {
+      if (!n.work_order_id || seen.has(n.work_order_id)) continue;
+      seen.add(n.work_order_id);
+      out.push({ id: n.work_order_id, at: n.created_at, cause: notificationErrorLabel(n.error) });
+    }
+    return out;
+  }, [failedNotifications]);
+
+  // Jobs that are still open AND were never delivered — these are the live
+  // risk. Closed jobs that failed earlier are counted separately so the
+  // banner does not cry wolf over history.
+  const openUndelivered = useMemo(() => {
+    const byId = new Map(orders.map((o) => [o.id, o]));
+    return undelivered.filter((u) => {
+      const o = byId.get(u.id);
+      return !!o && o.status !== "completed" && o.status !== "cancelled";
+    });
+  }, [undelivered, orders]);
+
+  const undeliveredIds = useMemo(() => new Set(undelivered.map((u) => u.id)), [undelivered]);
 
   // Apply both filters (status + data source + call type)
   const filtered = orders.filter((o) => {
@@ -160,6 +214,44 @@ function DashboardPageInner() {
           </div>
         </div>
       </div>
+
+      {/* Undelivered job notifications — these jobs exist, but the boss was
+          never told about them. Until this banner existed, that failure was
+          completely invisible. */}
+      {openUndelivered.length > 0 && (
+        <div className="mb-6 rounded-lg border border-red-300 bg-red-50 px-4 py-3">
+          <div className="flex items-start gap-3">
+            <span className="text-base leading-none mt-0.5">🔕</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-red-900">
+                {openUndelivered.length} open job{openUndelivered.length === 1 ? "" : "s"} never reached the boss
+              </div>
+              <div className="text-xs text-red-800 mt-0.5">
+                {openUndelivered[0].cause} · last attempt {relativeTime(openUndelivered[0].at)}
+              </div>
+              <div className="mt-2 space-y-1">
+                {openUndelivered.slice(0, 5).map((u) => {
+                  const o = orders.find((x) => x.id === u.id);
+                  return (
+                    <Link
+                      key={u.id}
+                      href={`/orders/${u.id}`}
+                      className="block text-xs text-red-800 hover:text-red-900 hover:underline truncate"
+                    >
+                      • {o?.summary || o?.customer_name || "Job"} — {relativeTime(u.at)}
+                    </Link>
+                  );
+                })}
+                {openUndelivered.length > 5 && (
+                  <div className="text-xs text-red-700">
+                    + {openUndelivered.length - 5} more
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -282,7 +374,11 @@ function DashboardPageInner() {
       ) : (
         <div className="space-y-2">
           {filtered.map((order) => (
-            <WorkOrderRow key={order.id} order={order} />
+            <WorkOrderRow
+              key={order.id}
+              order={order}
+              notNotified={undeliveredIds.has(order.id)}
+            />
           ))}
         </div>
       )}
@@ -308,7 +404,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
   );
 }
 
-function WorkOrderRow({ order }: { order: WorkOrder }) {
+function WorkOrderRow({ order, notNotified }: { order: WorkOrder; notNotified?: boolean }) {
   const source = (order.data_source || "production") as DataSource;
   const badge = SOURCE_BADGE[source];
   const callType = order.call_type || "ai";
@@ -381,6 +477,14 @@ function WorkOrderRow({ order }: { order: WorkOrder }) {
                 title={aiQualityLabel(order.ai_quality_flag)}
               >
                 ⚠ AI misbehaved
+              </span>
+            )}
+            {notNotified && (
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium rounded border bg-red-100 text-red-800 border-red-200"
+                title="The boss was never notified about this job — the notification delivery failed"
+              >
+                🔕 Not notified
               </span>
             )}
             <span
