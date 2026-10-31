@@ -129,35 +129,46 @@ function DashboardPageInner() {
       });
   }, []);
 
-  // The latest delivery attempt per job. The list is sorted newest first,
-  // so the first row seen for an order is the one that counts.
-  const latestDelivery = useMemo(() => {
-    const map = new Map<string, NotificationRecord>();
+  // Delivery state per job. `sent` is sticky: once the boss has been told
+  // about a job, later failures do not undo that. The banner asks "did the
+  // boss ever hear about this job?", and a job that was delivered before a
+  // later attempt failed still counts as delivered.
+  //
+  // A job with NO delivery record at all also counts as undelivered — the
+  // earliest orders predate the delivery log, and they were never told
+  // either. Counting only the recorded failures under-reports the backlog.
+  const deliveryByOrder = useMemo(() => {
+    const map = new Map<string, { latest: NotificationRecord | null; sent: boolean }>();
     for (const n of notifications) {
       if (!n.work_order_id) continue;
-      if (!map.has(n.work_order_id)) map.set(n.work_order_id, n);
+      const cur = map.get(n.work_order_id) ?? { latest: null, sent: false };
+      if (!cur.latest) cur.latest = n; // the list is newest first
+      if (n.status === "sent") cur.sent = true;
+      map.set(n.work_order_id, cur);
     }
     return map;
   }, [notifications]);
 
-  // Jobs whose most recent delivery attempt failed — that is the live risk.
-  // Closed jobs are excluded so the banner does not cry wolf over history.
-  //
-  // Production only: demo and test records are not lost business, and mixing
-  // them in would bury the real number under noise.
+  // Open production jobs the boss was never told about. Closed jobs are
+  // excluded so the banner does not cry wolf over history, and demo/test
+  // records are excluded because they are not lost business.
   const undelivered = useMemo(() => {
-    const byId = new Map(orders.map((o) => [o.id, o]));
     const out: { id: string; at: string; cause: string }[] = [];
-    for (const [orderId, n] of latestDelivery) {
-      if (n.status !== "failed") continue;
-      const o = byId.get(orderId);
-      if (!o) continue;
+    for (const o of orders) {
       if (o.status === "completed" || o.status === "cancelled") continue;
       if ((o.data_source || "production") !== "production") continue;
-      out.push({ id: orderId, at: n.created_at, cause: notificationErrorLabel(n.error) });
+      const d = deliveryByOrder.get(o.id);
+      if (d?.sent) continue;
+      out.push({
+        id: o.id,
+        at: d?.latest?.created_at ?? o.created_at,
+        cause: d?.latest
+          ? notificationErrorLabel(d.latest.error)
+          : "Never attempted — no delivery record exists",
+      });
     }
     return out.sort((a, b) => (a.at < b.at ? 1 : -1));
-  }, [latestDelivery, orders]);
+  }, [deliveryByOrder, orders]);
 
   const undeliveredIds = useMemo(
     () => new Set(undelivered.map((u) => u.id)),

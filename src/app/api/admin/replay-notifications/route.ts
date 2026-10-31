@@ -87,9 +87,10 @@ export async function POST(req: NextRequest) {
     const all = (orders || []) as WorkOrder[];
     const ids = all.map((o) => o.id);
 
-    // Latest delivery attempt per job. The notification rows are ordered
-    // newest first, so the first row seen for an id is the one that counts.
-    const latest = new Map<string, { status: string; created_at: string; error: string | null }>();
+    // Delivery state per job. `sent` is sticky — once the boss has been told
+    // about a job, a later failed attempt does not undo that, and re-texting
+    // him about work he already knows about is noise.
+    const latest = new Map<string, { status: string; created_at: string; error: string | null; sent: boolean }>();
     if (ids.length) {
       const { data: rows, error: nErr } = await supabase
         .from("notifications")
@@ -102,18 +103,24 @@ export async function POST(req: NextRequest) {
       }
       for (const r of rows || []) {
         const id = (r as { work_order_id: string }).work_order_id;
-        if (id && !latest.has(id)) {
-          latest.set(id, r as { status: string; created_at: string; error: string | null });
+        if (!id) continue;
+        const cur = latest.get(id) ?? { status: "none", created_at: "", error: null, sent: false };
+        if (cur.created_at === "") {
+          cur.status = (r as { status: string }).status;
+          cur.created_at = (r as { created_at: string }).created_at;
+          cur.error = (r as { error: string | null }).error;
         }
+        if ((r as { status: string }).status === "sent") cur.sent = true;
+        latest.set(id, cur);
       }
     }
 
-    // A job is missed when it has no delivery attempt at all, or when its
-    // most recent attempt failed.
+    // A job is missed when the boss has NEVER been successfully told about
+    // it — including jobs with no delivery record at all (the earliest
+    // orders predate the delivery log).
     const missed = all.filter((o) => {
       if (!includeRejected && o.ai_decision === "rejected") return false;
-      const l = latest.get(o.id);
-      return !l || l.status === "failed";
+      return !latest.get(o.id)?.sent;
     });
 
     const selected = missed.slice(0, limit);
