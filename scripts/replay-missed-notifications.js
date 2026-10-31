@@ -62,8 +62,9 @@ const days = num("days", 30);
 const limit = num("limit", 50);
 const apply = has("--apply");
 const digest = has("--digest");
+const includeRejected = has("--include-rejected");
 
-const payload = JSON.stringify({ days, limit, apply, digest });
+const payload = JSON.stringify({ days, limit, apply, digest, includeRejected });
 
 console.log(`→ ${apply ? "SENDING" : "DRY RUN"} — ${days} day window${digest ? ", digest mode" : ""}`);
 console.log(`→ POST ${APP_URL}/api/admin/replay-notifications`);
@@ -141,6 +142,7 @@ if (json.mode === "dry-run") {
       ? "  node scripts/replay-missed-notifications.js --apply --digest"
       : "  node scripts/replay-missed-notifications.js --apply",
   );
+  console.log("  (add --include-rejected to also replay out-of-scope jobs)");
   process.exit(0);
 }
 

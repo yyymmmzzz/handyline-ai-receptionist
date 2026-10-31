@@ -146,6 +146,46 @@ changing them.
 
 ---
 
+## 6.5 Step 4b — Replay the jobs he was never told about (agent)
+
+The upgrade fixes the channel going forward. It does **not** deliver the 26
+open jobs that were silently dropped while the account was dead.
+
+```bash
+# 1. See what was missed — nothing is sent in this mode
+node scripts/replay-missed-notifications.js --days=90
+
+# 2. Deliver them. --digest sends ONE summary message instead of one text
+#    per job, which is the sane choice above a handful of jobs.
+node scripts/replay-missed-notifications.js --days=90 --apply --digest
+```
+
+The replay runs the real production notify path, so each job's latest
+delivery attempt becomes a success and the dashboard banner clears on its
+own. Verify afterwards with `node scripts/replay-missed-notifications.js
+--days=90` — it should report nothing missed.
+
+---
+
+## 6.6 Step 4c — Turn on the 5-minute emergency retry (Mimatt)
+
+`/api/cron/emergency-retry` re-dials the boss for an urgent job he did not
+answer. It was **never scheduled** — it cannot be a Vercel cron (Hobby
+allows daily crons only, and the route is POST-only while Vercel Cron
+issues GET).
+
+A GitHub Actions workflow does it instead: `.github/workflows/emergency-retry.yml`,
+every 5 minutes. It needs one thing:
+
+> Repo → **Settings → Secrets and variables → Actions** → **New repository
+> secret** → name `CRON_SECRET`, value = the same `CRON_SECRET` the app
+> uses.
+
+Without that secret the endpoint refuses to run, and the workflow says so
+in its log instead of failing silently.
+
+---
+
 ## 7. Step 5 — Verify (agent)
 
 ```bash

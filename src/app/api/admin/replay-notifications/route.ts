@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { days?: number; apply?: boolean; digest?: boolean; limit?: number } = {};
+  let body: { days?: number; apply?: boolean; digest?: boolean; limit?: number; includeRejected?: boolean } = {};
   try {
     body = await req.json();
   } catch {
@@ -60,6 +60,10 @@ export async function POST(req: NextRequest) {
   const apply = body.apply === true;
   const digest = body.digest === true;
   const limit = Math.min(Math.max(Number(body.limit ?? 50), 1), 200);
+  // Out-of-scope jobs need no action from the merchant, so replaying them
+  // is noise. The live path does notify on them (a referral may be
+  // wanted), but a backlog of old "❌ Out of scope" texts is not.
+  const includeRejected = body.includeRejected === true;
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
   try {
@@ -107,6 +111,7 @@ export async function POST(req: NextRequest) {
     // A job is missed when it has no delivery attempt at all, or when its
     // most recent attempt failed.
     const missed = all.filter((o) => {
+      if (!includeRejected && o.ai_decision === "rejected") return false;
       const l = latest.get(o.id);
       return !l || l.status === "failed";
     });
@@ -130,6 +135,7 @@ export async function POST(req: NextRequest) {
         mode: "dry-run",
         days,
         digest,
+        includeRejected,
         scanned: all.length,
         missed: missed.length,
         selected: selected.length,

@@ -116,6 +116,8 @@ export function notificationErrorLabel(error: string | null | undefined): string
   const e = error.toLowerCase();
   if (e.startsWith("twilio_from_not_owned"))
     return "The sending number is not owned by this Twilio account";
+  if (e.startsWith("twilio_trial_expired"))
+    return "The Twilio trial has expired — the account must be upgraded";
   if (e.includes("trial account has expired"))
     return "The Twilio trial has expired — the account must be upgraded";
   if (e.includes("no twilio trial phone number"))
