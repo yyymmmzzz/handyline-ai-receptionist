@@ -141,11 +141,16 @@ function DashboardPageInner() {
   // Jobs that are still open AND were never delivered — these are the live
   // risk. Closed jobs that failed earlier are counted separately so the
   // banner does not cry wolf over history.
+  //
+  // Production only: demo and test records are not lost business, and mixing
+  // them in would bury the real number under noise.
   const openUndelivered = useMemo(() => {
     const byId = new Map(orders.map((o) => [o.id, o]));
     return undelivered.filter((u) => {
       const o = byId.get(u.id);
-      return !!o && o.status !== "completed" && o.status !== "cancelled";
+      if (!o) return false;
+      if (o.status === "completed" || o.status === "cancelled") return false;
+      return (o.data_source || "production") === "production";
     });
   }, [undelivered, orders]);
 

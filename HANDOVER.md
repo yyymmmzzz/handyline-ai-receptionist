@@ -54,6 +54,16 @@ Must read (in order):
 7. **src/app/api/vapi/tools/route.ts** — the actual backend for AI tool calls
 8. **src/app/api/vapi/webhook/route.ts** — the Vapi end-of-call webhook
 
+> **Currently blocked on two external accounts (2026-10-31).**
+> `docs/TWILIO-UPGRADE-RUNBOOK.md` — the Twilio trial has expired, so every
+> notification to the merchant fails and the human-answering line cannot be
+> bought until the account is upgraded. Read this before touching `notify.ts`
+> or `emergency-call.ts`.
+> `scripts/push-cron-env.sh` — pushes `CRON_SECRET` and
+> `SUPABASE_ACCESS_TOKEN` into Vercel. The Vercel device code it prints is
+> only valid for 10 minutes, so the login has to happen in the same
+> terminal that runs it.
+
 ### Day 3: Run the test scripts to verify the environment
 
 ```bash
