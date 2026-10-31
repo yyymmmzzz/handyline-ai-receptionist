@@ -147,5 +147,5 @@ curl -sS --http1.1 --max-time 60 -H "Authorization: Bearer $CRON_SECRET" \
 echo
 echo
 echo "  If restoreEnabled is still false, the live deployment has not picked the"
-echo "  new env vars up yet. Run:"
-echo "      ./scripts/push-cron-env.sh --redeploy"
+echo "  new env vars up yet. Wait for the build to finish (~2 minutes), then run:"
+echo "      ./scripts/push-cron-env.sh --verify"
