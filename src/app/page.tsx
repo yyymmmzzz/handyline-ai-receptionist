@@ -152,11 +152,16 @@ function DashboardPageInner() {
   // Open production jobs the boss was never told about. Closed jobs are
   // excluded so the banner does not cry wolf over history, and demo/test
   // records are excluded because they are not lost business.
+  //
+  // Out-of-scope jobs are excluded too: the boss needs no action on them,
+  // so counting them would inflate the alarm. The replay tool applies the
+  // same rule, so the banner and the tool always agree on the number.
   const undelivered = useMemo(() => {
     const out: { id: string; at: string; cause: string }[] = [];
     for (const o of orders) {
       if (o.status === "completed" || o.status === "cancelled") continue;
       if ((o.data_source || "production") !== "production") continue;
+      if (o.ai_decision === "rejected") continue;
       const d = deliveryByOrder.get(o.id);
       if (d?.sent) continue;
       out.push({
